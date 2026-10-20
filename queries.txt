@@ -1,0 +1,432 @@
+------LAYOUT SP1 - ANL_CATEGORIAS ------
+
+SELECT
+DISTINCT 
+'R10' as CVE_UR,
+a.cat_puesto as CVE_CATEGORIA,
+a.descripcion as DESCRIPCION,
+(select DISTINCT clas.cve_clasificacion FROM nomina_est.dbo.clasificacion clas WHERE TRIM(clas.cve_categoria) = trim(a.cat_puesto) ) AS CVE_CLASIFICACION,
+(select distinct clas.adscripcion FROM nomina_est.dbo.clasificacion clas WHERE TRIM(clas.cve_categoria) = trim(a.cat_puesto) ) AS ADSCRIPCION,
+(select clas.CVE_EQUIV from nomina_est.dbo.clasificacion clas where TRIM(clas.CVE_CATEGORIA)=TRIM(a.cat_puesto)) as CVE_EQUIV
+FROM nomina_est.dbo.categoria_puesto a
+where (a.cat_puesto not like '%JUBIL%' AND
+a.cat_puesto not like '%HONOR%')
+and a.cat_puesto in (select b.cat_puesto from emp_plaza b where trim(a.cat_puesto)=trim(b.CAT_PUESTO) and b.QNA_FIN>=202601)
+order by CVE_CATEGORIA
+
+------TERMINA LAYOUT ANL_CATEGORIAS------ */
+
+
+------ LAYOUT SP2 - ANL_PLAZA ------ 
+
+DECLARE @qna_proc INT
+SET @qna_proc=202616    --- CAMBIAR A LA QUINCENA DE PROCESO QUE SE ESTA GENERANDO
+
+SELECT
+'R10' AS CVE_UR,
+a.cat_puesto as CVE_CATEGORIA,
+2 as MODELO,   --- EL EN ULTIMO LAYOUT DEL PORTAL SIGED PIDE QUE SEA EL VALOR FIJO DE 2
+ct.zona_eco AS CVE_ZONA_ECONOMICA, 
+'E'AS CVE_CONTRATACION,
+( case a.horas 
+when 0 then 'P'
+else 'H'
+END) AS CVE_TIPO_JORNADA,
+
+--clave_plaza--
+ (	case len(cast(a.cod_pago as nvarchar(2)))
+	when 1 then '0'+cast(a.cod_pago as nvarchar(1))
+	else cast(a.cod_pago as nvarchar(2))
+	end+
+	case len(cast(a.unidad as nvarchar(2)))
+	when 1 then '0'+cast(a.unidad as nvarchar(1))
+	else cast(a.unidad as nvarchar(2))
+	end+
+	case len(cast(a.subunidad as nvarchar(2)))
+	when 1 then '0'+cast(a.subunidad as nvarchar(1))
+	else cast(a.subunidad as nvarchar(2))
+	end+
+	a.cat_puesto+
+	case len(cast(cast(a.horas as int) as nvarchar(2)))
+	when 1 then '0'+cast(cast(a.horas as int) as nvarchar(1))+'.0'
+	when 2 then cast(cast(a.horas as int) as nvarchar(2))+'.0'
+	end+
+	case len(cast(a.cons_plaza as nvarchar(6)))
+	when 1 then '00000'+cast(a.cons_plaza as nvarchar(1))
+	when 2 then '0000'+cast(a.cons_plaza as nvarchar(2))
+	when 3 then '000'+cast(a.cons_plaza as nvarchar(3))
+	when 4 then '00'+cast(a.cons_plaza as nvarchar(4))
+	when 5 then '0'+cast(a.cons_plaza as nvarchar(5))
+	else cast(a.cons_plaza as nvarchar(6))
+	end) as CLAVE_PLAZA,
+
+	--CT--
+concat (ct.ent_fed, ct.ct_clasif, ct.ct_id, (case len(cast(ct.ct_secuencial as nvarchar(4)))
+	when 1 then '000'+cast(ct.ct_secuencial as nvarchar(1))
+	when 2 then '00'+cast(ct.ct_secuencial as nvarchar(2))
+	when 3 then '0'+cast(ct.ct_secuencial as nvarchar(3))
+	else cast(ct.ct_secuencial as nvarchar(4))
+	end),
+	ct.ct_digito_ver) as CCT,
+
+a.horas AS CANTIDAD,
+'O' AS ESTATUS,
+cast(@qna_proc/100 as nvarchar(4)) AS CICLO,
+substring(cast(@qna_proc as nvarchar(6)),5,2) AS CVE_QUINCENA,
+'0' AS TURNO,
+(Case 
+	When a.mot_mov=10 or a.mot_mov=9 or a.mot_mov=48 or a.mot_mov=81 Then 'B'
+	When a.mot_mov=96 Then 'C'
+	Else 'NA'
+End
+) AS CVE_BAS
+
+FROM emp_plaza a ,hist_plaza_ct hpct,centro_trabajo ct
+WHERE (a.cat_puesto not like '%JUBIL%' AND a.cat_puesto not like '%HONOR%')
+and a.cod_pago = hpct.cod_pago
+and a.unidad = hpct.unidad
+and a.subunidad = hpct.subunidad
+and a.cat_puesto = hpct.cat_puesto
+and a.horas = hpct.horas
+and a.cons_plaza = hpct.cons_plaza
+AND a.qna_fin>=202401--NO CAMBIAR DEJAR EN 202401--
+AND a.qna_fin BETWEEN hpct.qna_ini AND hpct.qna_fin
+and hpct.ent_fed = ct.ent_fed
+and hpct.ct_clasif = ct.ct_clasif
+and hpct.ct_id = ct.ct_id
+and hpct.CT_SECUENCIAL = ct.ct_secuencial
+and hpct.CT_DIGITO_VER = ct.ct_digito_ver
+and hpct.QNA_FIN between ct.qna_ini and ct.qna_fin
+ORDER BY a.cat_puesto,a.horas
+
+------ LAYOUT ANL_PLAZA ------ 
+
+
+
+-------------- SP3 - MOV_PERSONAL------------------
+
+DECLARE @qna_proc INT
+SET @qna_proc=202616   --- CAMBIAR A LA QUINCENA DE PROCESO QUE SE ESTA GENERANDO
+
+select
+CAST(@qna_proc/100 AS int) AS CICLO,
+'R10' AS CVE_UR,
+(select emp.curp from empleado emp where emp.rfc = a.rfc) AS CURP,
+
+--clave_plaza--
+ (	case len(cast(a.cod_pago as nvarchar(2)))
+	when 1 then '0'+cast(a.cod_pago as nvarchar(1))
+	else cast(a.cod_pago as nvarchar(2))
+	end+
+	case len(cast(a.unidad as nvarchar(2)))
+	when 1 then '0'+cast(a.unidad as nvarchar(1))
+	else cast(a.unidad as nvarchar(2))
+	end+
+	case len(cast(a.subunidad as nvarchar(2)))
+	when 1 then '0'+cast(a.subunidad as nvarchar(1))
+	else cast(a.subunidad as nvarchar(2))
+	end+
+	a.cat_puesto+
+	case len(cast(cast(a.horas as int) as nvarchar(2)))
+	when 1 then '0'+cast(cast(a.horas as int) as nvarchar(1))+'.0'
+	when 2 then cast(cast(a.horas as int) as nvarchar(2))+'.0'
+	end+
+	case len(cast(a.cons_plaza as nvarchar(6)))
+	when 1 then '00000'+cast(a.cons_plaza as nvarchar(1))
+	when 2 then '0000'+cast(a.cons_plaza as nvarchar(2))
+	when 3 then '000'+cast(a.cons_plaza as nvarchar(3))
+	when 4 then '00'+cast(a.cons_plaza as nvarchar(4))
+	when 5 then '0'+cast(a.cons_plaza as nvarchar(5))
+	else cast(a.cons_plaza as nvarchar(6))
+	end) as CODIGO_PLAZA,
+
+(select sig.id_siged from siged_motivos sig where sig.mot_mov = a.mot_mov) AS OPERACION,
+
+(select REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(ct.descripcion), ',', ' '), '.', ''),'(',''),')',''),'1/2','MEDIO'),'3/4','TRES CUARTOS') from categoria_puesto ct where ct.cat_puesto = a.cat_puesto) AS FUNCION_REAL,
+
+/*IIF((substring(cast(a.qna_ini as nvarchar(6)),5,2))='99','99990101',
+		cast(cast(a.qna_ini/100 as int) as varchar)
+			+ --Mes
+			right('00'+cast(((a.qna_ini-cast(a.qna_ini/100 as int)*100) - 1) / 2 + 1 as varchar),2)
+			+  -- Año
+			
+			(CASE   -- Día
+				WHEN (a.qna_ini-((cast(a.qna_ini/100 as int))*100)) % 2 = 1 THEN '01'
+				ELSE '16'
+		END
+))*/ '' as  INICIO_VIGENCIA_MOV,
+
+/*IIF((substring(cast(a.qna_fin as nvarchar(6)),5,2))='99','99990101',
+		cast(cast(a.qna_fin/100 as int) as varchar)
+				+ --Mes
+				right('00'+cast(((a.qna_fin-cast(a.qna_fin/100 as int)*100) - 1) / 2 + 1 as varchar),2)
+				+  -- Año
+				(CASE   -- Día
+			WHEN (a.qna_fin-((cast(a.qna_fin/100 as int))*100)) % 2 = 1 THEN '15'
+			ELSE 
+				cast(DAY(EOMONTH(DATEFROMPARTS(cast(a.qna_fin/100 as int),((a.qna_fin-cast(a.qna_fin/100 as int)*100) - 1) / 2 + 1, 1))) as varchar)
+		END
+				
+		))*/ '' as FIN_VIGENCIA_MOV,
+
+/*IIF((substring(cast(@qna_proc as nvarchar(6)),5,2))='99','99990101',
+		cast(cast(@qna_proc/100 as int) as varchar)
+			+ --Mes
+			right('00'+cast(((@qna_proc-cast(@qna_proc/100 as int)*100) - 1) / 2 + 1 as varchar),2)
+			+  -- Año
+			
+			(CASE   -- Día
+				WHEN (@qna_proc-((cast(@qna_proc/100 as int))*100)) % 2 = 1 THEN '02'
+				ELSE '16'
+		END
+))*/ '' AS INICIO_VIGENCIA_OPERA,
+/*IIF((substring(cast(@qna_proc as nvarchar(6)),5,2))='99','99990102',
+		cast(cast(@qna_proc/100 as int) as varchar)
+				+ --Mes
+				right('00'+cast(((@qna_proc-cast(@qna_proc/100 as int)*100) - 1) / 2 + 1 as varchar),2)
+				+  -- Año
+				(CASE   -- Día
+			WHEN (@qna_proc-((cast(@qna_proc/100 as int))*100)) % 2 = 1 THEN '15'
+			ELSE 
+				cast(DAY(EOMONTH(DATEFROMPARTS(cast(@qna_proc/100 as int),((@qna_proc-cast(@qna_proc/100 as int)*100) - 1) / 2 + 1, 1))) as varchar)
+		END
+				
+		))*/ '' AS FIN_VIGENCIA_OPERA,
+
+--COMIENZA EL ÚLTIMO CENTRO DE TRABAJO DE LA PLAZA--
+(SELECT concat (b.ent_fed, b.ct_clasif, b.ct_id, (case len(cast(b.ct_secuencial as nvarchar(4)))
+	when 1 then '000'+cast(b.ct_secuencial as nvarchar(1))
+	when 2 then '00'+cast(b.ct_secuencial as nvarchar(2))
+	when 3 then '0'+cast(b.ct_secuencial as nvarchar(3))
+	else cast(b.ct_secuencial as nvarchar(4))
+	end),b.ct_digito_ver) as CCT
+	
+	FROM hist_plaza_ct b, centro_trabajo e
+	WHERE 
+		a.COD_PAGO = b.COD_PAGO and
+		a.UNIDAD = b.UNIDAD and
+		a.SUBUNIDAD = b.SUBUNIDAD and
+		a.CAT_PUESTO = b.CAT_PUESTO and
+		a.HORAS = b.HORAS and
+		a.cons_plaza = b.CONS_PLAZA
+		and a.qna_fin between b.qna_ini and b.qna_fin
+		and b.ent_fed=e.ent_fed
+		and b.ct_clasif=e.ct_clasif
+		and b.ct_id=e.ct_id
+		and b.ct_secuencial=e.ct_secuencial
+		and b.ct_digito_ver=e.ct_digito_ver
+		and b.qna_fin between e.qna_ini and e.qna_fin
+		/*
+		--SE ORDENA DE LA QNA FIN PARA QUE QUEDE EN PRIMER LUGAR EL ÚLTIMO CENTRO --      
+		order by QNA_FIN DESC 
+		--CON EL SIGUIENTE COMANDO SÓLO TOMA EL PRIMER REGISTRO DEL ARREGLO
+		OFFSET 0 ROWS FETCH FIRST 1 ROWS ONLY*/
+		) as CCT,
+--TERMINA EL ÚLTIMO CENTRO DE TRABAJO DE LA PLAZA--
+
+substring(cast(@qna_proc as nvarchar(6)),5,2) AS CVE_QUINCENA
+from emp_plaza a
+where ( a.mot_mov = 9 or a.mot_mov = 10 or a.mot_mov = 20 or a.mot_mov = 24 or a.mot_mov = 25 or a.mot_mov = 26 or a.mot_mov = 31 or
+a.mot_mov = 32 or a.mot_mov = 33 or a.mot_mov = 34 or a.mot_mov = 35 or a.mot_mov = 36 or a.mot_mov = 37 or a.mot_mov = 41 or a.mot_mov = 42 or
+a.mot_mov = 43 or a.mot_mov = 44 or a.mot_mov = 45 or a.mot_mov = 47 or a.mot_mov = 48 or a.mot_mov = 51 or a.mot_mov = 52 or a.mot_mov = 61 or
+a.mot_mov = 62 or a.mot_mov = 63 or a.mot_mov = 66 or a.mot_mov = 67 or a.mot_mov = 84 or a.mot_mov = 94 or a.mot_mov = 95 or a.mot_mov = 96 ) and 
+a.qna_ini = @qna_proc
+
+
+
+
+
+--------------- POR LO PRONTO ESTOS NO -----------------------------------
+------ LAYOUT SP4 - MOV_PLAZA ------ 
+
+select distinct
+'R10' AS CVE_UR,
+ 
+( CASE a.cve_mov 
+when 9 then 'CAMBIO CT'
+when 10 then 'PROMOCION' 
+else cast(a.cve_mov as nvarchar(2))
+end) as ORIGEN_PRESUPUESTAL,
+
+( Case 
+when a.mot_mov=10 or a.mot_mov=9 or mot_mov=95 or mot_mov=96 or mot_mov=48 or (mot_mov=20 and a.part_fup=1103) then '07'
+when a.mot_mov = 5  then '05'
+when a.mot_mov = 22 then '48'
+when a.mot_mov = 24 then '14'
+when a.mot_mov = 25 then '15'
+when a.mot_mov = 26 then '80'
+when a.mot_mov = 81 then '81'
+Else (Case a.part_fup When 1103 Then '07' Else '' End)
+End+
+case len(cast(a.unidad as nvarchar(2)))
+when 1 then '0'+cast(a.unidad as nvarchar(1))
+else cast(a.unidad as nvarchar(2))
+end+
+case len(cast(a.subunidad as nvarchar(2)))
+when 1 then '0'+cast(a.subunidad as nvarchar(1))
+else cast(a.subunidad as nvarchar(2))
+end+
+a.cat_puesto+
+case len(cast(cast(a.horas as int) as nvarchar(2)))
+when 1 then '0'+cast(cast(a.horas as int) as nvarchar(1))+'.0'
+when 2 then cast(cast(a.horas as int) as nvarchar(2))+'.0'
+end+
+case len(cast(a.cons_plaza as nvarchar(6)))
+when 1 then '00000'+cast(a.cons_plaza as nvarchar(1))
+when 2 then '0000'+cast(a.cons_plaza as nvarchar(2))
+when 3 then '000'+cast(a.cons_plaza as nvarchar(3))
+when 4 then '00'+cast(a.cons_plaza as nvarchar(4))
+when 5 then '0'+cast(a.cons_plaza as nvarchar(5))
+else cast(a.cons_plaza as nvarchar(6))
+end) as CODIGO_PLAZA,
+
+--COMIENZA EL ÚLTIMO CENTRO DE TRABAJO DE LA PLAZA--
+(SELECT concat (b.ent_fed, b.ct_clasif, b.ct_id, (case len(cast(b.ct_secuencial as nvarchar(4)))
+	when 1 then '000'+cast(b.ct_secuencial as nvarchar(1))
+	when 2 then '00'+cast(b.ct_secuencial as nvarchar(2))
+	when 3 then '0'+cast(b.ct_secuencial as nvarchar(3))
+	else cast(b.ct_secuencial as nvarchar(4))
+	end),b.ct_digito_ver) as CCT
+	
+	FROM hist_plaza_ct b 
+	WHERE ( Case 
+when a.mot_mov=10 or a.mot_mov=9 or mot_mov=95 or mot_mov=96 or mot_mov=48 or (mot_mov=20 and a.part_fup=1103) then 7
+when a.mot_mov = 5  then 5
+when a.mot_mov = 22 then 48
+when a.mot_mov = 24 then 14
+when a.mot_mov = 25 then 15
+when a.mot_mov = 26 then 80
+when a.mot_mov = 81 then 81
+
+Else (Case a.part_fup When 1103 Then 7 Else 0 End)End)=b.cod_pago and
+		a.UNIDAD = b.UNIDAD and
+		a.SUBUNIDAD = b.SUBUNIDAD and
+		a.CAT_PUESTO = b.CAT_PUESTO and
+		a.HORAS = b.HORAS and
+		a.cons_plaza = b.CONS_PLAZA
+		and a.qna_ini between b.qna_ini and b.qna_fin
+		) as CCT,
+
+'' AS COSTO_UNITARIO_ANUAL, --NO OBLIGATORIO --
+IIF((substring(cast(a.qna_ini as nvarchar(6)),5,2))='99','99990101',
+		cast(cast(a.qna_ini/100 as int) as varchar)
+			+ --Mes
+			right('00'+cast(((a.qna_ini-cast(a.qna_ini/100 as int)*100) - 1) / 2 + 1 as varchar),2)
+			+  -- Año
+			
+			(CASE   -- Día
+				WHEN (a.qna_ini-((cast(a.qna_ini/100 as int))*100)) % 2 = 1 THEN '01'
+				ELSE '16'
+		END
+)) as  FECHA_AUTORIZACION,
+
+cast(a.qna_proc/100 as int) AS CICLO,
+substring(cast(a.qna_proc as nvarchar(6)),5,2) AS CVE_QUINCENA
+from DETALLE_MOV1_HIST a,
+	ident_doc1_hist b
+where a.qna_proc=202616  --- CAMBIAR A LA QUINCENA DE PROCESO QUE SE ESTA GENERANDO
+and cve_mov in (9,10)
+and a.num_doc=b.NUM_DOC
+and a.qna_proc=b.QNA_PROC
+and b.ESTATUS=5
+
+
+------ LAYOUT SP5 - PAGOS_NÓMINA ------
+SELECT
+cast(a.qna_proc/100 as nvarchar(4)) AS CICLO,
+'R10' AS CVE_UR,
+substring(cast(a.qna_proc as nvarchar(6)),5,2) AS CVE_QUINCENA,
+( CASE a.tipo_nomina 
+when 'A' then 'O'
+when 'E' then 'E' 
+end) as CVE_TIPO_NOMINA,
+a.num_cons as NUMERO_NOMINA,
+ISNULL((select e.curp from nomina_est.dbo.empleado e where e.rfc = a.rfc ),'') as CURP,
+a.rfc AS RFC,
+--clave_plaza--
+ (	case len(cast(a.cod_pago as nvarchar(2)))
+	when 1 then '0'+cast(a.cod_pago as nvarchar(1))
+	else cast(a.cod_pago as nvarchar(2))
+	end+
+	case len(cast(a.unidad as nvarchar(2)))
+	when 1 then '0'+cast(a.unidad as nvarchar(1))
+	else cast(a.unidad as nvarchar(2))
+	end+
+	case len(cast(a.subunidad as nvarchar(2)))
+	when 1 then '0'+cast(a.subunidad as nvarchar(1))
+	else cast(a.subunidad as nvarchar(2))
+	end+
+	a.cat_puesto+
+	case len(cast(cast(a.horas as int) as nvarchar(2)))
+	when 1 then '0'+cast(cast(a.horas as int) as nvarchar(1))+'.0'
+	when 2 then cast(cast(a.horas as int) as nvarchar(2))+'.0'
+	end+
+	case len(cast(a.cons_plaza as nvarchar(6)))
+	when 1 then '00000'+cast(a.cons_plaza as nvarchar(1))
+	when 2 then '0000'+cast(a.cons_plaza as nvarchar(2))
+	when 3 then '000'+cast(a.cons_plaza as nvarchar(3))
+	when 4 then '00'+cast(a.cons_plaza as nvarchar(4))
+	when 5 then '0'+cast(a.cons_plaza as nvarchar(5))
+	else cast(a.cons_plaza as nvarchar(6))
+	end) as CODIGO_PLAZA,
+
+		--CT--
+concat (a.ent_fed, a.ct_clasif, a.ct_id, (case len(cast(a.ct_secuencial as nvarchar(4)))
+	when 1 then '000'+cast(a.ct_secuencial as nvarchar(1))
+	when 2 then '00'+cast(a.ct_secuencial as nvarchar(2))
+	when 3 then '0'+cast(a.ct_secuencial as nvarchar(3))
+	else cast(a.ct_secuencial as nvarchar(4))
+	end),
+	a.ct_digito_ver) as CVE_CCT,
+	ISNULL((select TRIM(e.apellido1) from nomina_est.dbo.empleado e where e.rfc = a.rfc ),'') as PRIMER_APELLIDO,
+	ISNULL((select TRIM(e.apellido2) from nomina_est.dbo.empleado e where e.rfc = a.rfc ),'') as SEGUNDO_APELLIDO,
+	(select TRIM(e.nombre) from nomina_est.dbo.empleado e where e.rfc = a.rfc ) as NOMBRE,
+	a.num_cheque as NUM_COMPROBANTE,
+	
+	(Case 
+		When a.num_cheque<60000000 Then '2'
+		Else '1'
+	 End
+	 )  as CVE_FORMA_PAGO,
+
+	'' AS PERCEPCIONES,
+	'' AS DEDUCCIONES,
+	'' AS NETO,
+
+IIF((substring(cast(a.qna_ini as nvarchar(6)),5,2))='99','NO APLICA',
+	cast(cast(a.qna_ini/100 as int) as varchar)
+	+ --'/'+ --Mes
+	right('00'+cast(((a.qna_ini-cast(a.qna_ini/100 as int)*100) - 1) / 2 + 1 as varchar),2)
+	+ --'/'+  -- Año
+	(CASE   -- Día
+			WHEN (a.qna_ini-((cast(a.qna_ini/100 as int))*100)) % 2 = 1 THEN '01'
+			ELSE '16'
+	END	
+	)) as FECHA_INICIO,
+
+IIF((substring(cast(a.qna_fin as nvarchar(6)),5,2))='99','NO APLICA',
+	-- Año
+	cast(cast(a.qna_fin/100 as int) as varchar)
+	+ --'/'+ 
+	--Mes
+	right('00'+cast(((a.qna_fin-cast(a.qna_fin/100 as int)*100) - 1) / 2 + 1 as varchar),2)
+	+ --'/'+
+	-- Día
+	(CASE
+		WHEN (a.qna_fin-((cast(a.qna_fin/100 as int))*100)) % 2 = 1 THEN '15'
+		ELSE 
+		cast(DAY(EOMONTH(DATEFROMPARTS(cast(a.qna_fin/100 as int),((a.qna_fin-cast(a.qna_fin/100 as int)*100) - 1) / 2 + 1, 1))) as varchar)
+	END	
+	)) as FECHA_TERMINO
+
+FROM sirhdb.dbo.cc_202616 a  --- CAMBIAR A LA QUINCENA DE PROCESO QUE SE ESTA GENERANDO
+where a.num_cons < 30000
+and a.num_cons not in (
+select b.num_cons
+FROM sirhdb.dbo.ccd_202616 b  --- CAMBIAR A LA QUINCENA DE PROCESO QUE SE ESTA GENERANDO
+where b.perc_ded='P'
+and b.concepto='SF'
+)
+and (a.cat_puesto not like '%JUBIL%' AND
+a.cat_puesto not like '%HONOR%')
+order by a.num_cons
