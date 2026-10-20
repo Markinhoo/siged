@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
-    "dev:server": "node --watch server/index.js",
+    "dev:server": "node server/supervisor.js",
     "dev:client": "vite --host 0.0.0.0",
     "build": "vite build",
     "start": "node server/index.js"

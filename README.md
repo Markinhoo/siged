@@ -22,6 +22,8 @@ Aplicación React con un servidor Express que ejecuta los cinco SELECT del archi
 
    Abre la dirección local que Vite muestra en la terminal. Para usarla en una red, ejecuta el servidor en un equipo al que los usuarios puedan acceder y asegúrate de que ese equipo tenga acceso a SQL Server.
 
+   En desarrollo, el supervisor reinicia el servidor si el proceso termina inesperadamente y al cambiar el SQL, el código del servidor o `.env`. Cerrar la pestaña del navegador no detiene el servidor; usa `Ctrl+C` en la terminal para detener toda la aplicación.
+
 Para publicar una compilación, ejecuta `npm run build` y después `npm start` con `NODE_ENV=production` y el mismo `.env` disponible en el servidor.
 
 ## QNA y layouts
