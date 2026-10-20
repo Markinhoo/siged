@@ -47,7 +47,7 @@ function AuthScreen({ theme, onToggleTheme, configured, error, username, setUser
 }
 
 function App() {
-  const [qna, setQna] = useState('202616');
+  const [qna, setQna] = useState('');
   const [qnas, setQnas] = useState([]);
   const [qnaLoading, setQnaLoading] = useState(true);
   const [qnaError, setQnaError] = useState('');
@@ -101,7 +101,11 @@ function App() {
       .then((available) => {
         if (!active) return;
         setQnas(available);
-        setQna((current) => available.includes(current) ? current : (available[0] || ''));
+        // El periodo de proceso siempre inicia con la QNA más reciente
+        // disponible (por ejemplo, 202701 después de 202620).
+        const latest = available.reduce((currentLatest, period) =>
+          Number(period) > Number(currentLatest) ? period : currentLatest, '');
+        setQna(latest);
       })
       .catch((error) => {
         if (!active) return;
