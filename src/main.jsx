@@ -21,7 +21,7 @@ function AuthScreen({ theme, onToggleTheme, configured, error, username, setUser
   return <main className="shell auth-page">
     <header className="topbar">
       <a className="brand" href="#inicio" aria-label="SIGED">
-        <span className="brand-mark">S</span><span className="brand-name">SIGED<span className="brand-sub">· EXPORTADOR</span></span>
+        <span className="brand-mark">S</span><span className="brand-name">Sistema Validador de Layouts Para el SIGED</span>
       </a>
       <ThemeButton theme={theme} onToggle={onToggleTheme} />
     </header>
@@ -216,7 +216,7 @@ function App() {
   return <main className="shell">
     <header className="topbar">
       <a className="brand" href="#inicio" aria-label="Inicio SIGED">
-        <span className="brand-mark">S</span><span className="brand-name">SIGED<span className="brand-sub">· EXPORTADOR</span></span>
+        <span className="brand-mark">S</span><span className="brand-name">Sistema Validador de Layouts Para el SIGED</span>
       </a>
       <div className="top-actions">
         <span className="top-label"><span className="live-dot" /> Herramienta de layouts</span>
