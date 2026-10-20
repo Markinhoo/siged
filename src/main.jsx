@@ -21,12 +21,12 @@ function AuthScreen({ theme, onToggleTheme, configured, error, username, setUser
   return <main className="shell auth-page">
     <header className="topbar">
       <a className="brand" href="#inicio" aria-label="SIGED">
-        <span className="brand-mark">S</span><span className="brand-name">Sistema Validador de Layouts Para el SIGED</span>
+        <span className="brand-name">Sistema Validador de Layouts Para el SIGED</span>
       </a>
       <ThemeButton theme={theme} onToggle={onToggleTheme} />
     </header>
     {configured ? <form className="login-card" onSubmit={onSubmit}>
-      <div className="login-lock" aria-hidden="true">⌑</div>
+      <img className="login-logo" src="/siged-logo.png" alt="Sistema Validador de Layouts para el SIGED" />
       <div className="eyebrow"><span>ACCESO PROTEGIDO</span></div>
       <h1>Iniciar sesión</h1>
       <p className="login-intro">Ingresa tus credenciales para acceder a los layouts de nómina.</p>
@@ -216,7 +216,7 @@ function App() {
   return <main className="shell">
     <header className="topbar">
       <a className="brand" href="#inicio" aria-label="Inicio SIGED">
-        <span className="brand-mark">S</span><span className="brand-name">Sistema Validador de Layouts Para el SIGED</span>
+        <img className="brand-logo" src="/siged-logo.png" alt="" /><span className="brand-name">Sistema Validador de Layouts Para el SIGED</span>
       </a>
       <div className="top-actions">
         <span className="top-label"><span className="live-dot" /> Herramienta de layouts</span>
