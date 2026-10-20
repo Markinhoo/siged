@@ -2,12 +2,14 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import sql from 'mssql';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const app = express();
 const port = Number(process.env.PORT || 3002);
+const host = process.env.HOST || '127.0.0.1';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const queryText = await readFile(path.join(here, '..', 'queries.txt'), 'utf8');
 const sections = [
@@ -17,6 +19,12 @@ const sections = [
   { id: 'SP4', title: 'MOV_PLAZA', start: 'LAYOUT SP4', next: 'LAYOUT SP5' },
   { id: 'SP5', title: 'PAGOS_NÓMINA', start: 'LAYOUT SP5', next: null },
 ];
+const sessions = new Map();
+const loginAttempts = new Map();
+const sessionTtlMs = 8 * 60 * 60 * 1000;
+const loginWindowMs = 15 * 60 * 1000;
+const maxLoginAttempts = 5;
+const cookieName = 'siged_session';
 
 function sectionSql(section) {
   const start = queryText.indexOf(section.start);
@@ -49,6 +57,54 @@ function getPool() {
     throw error;
   });
   return poolPromise;
+}
+
+function authCredentials() {
+  return { username: process.env.APP_USERNAME || '', password: process.env.APP_PASSWORD || '' };
+}
+
+function authIsConfigured() {
+  const { username, password } = authCredentials();
+  return Boolean(username && password.length >= 12);
+}
+
+function safeEqual(expected, actual) {
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(String(actual ?? ''));
+  return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+function sessionToken(req) {
+  const cookie = (req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${cookieName}=`));
+  return cookie ? cookie.slice(cookieName.length + 1) : '';
+}
+
+function setSessionCookie(res, token) {
+  const secure = process.env.SESSION_SECURE_COOKIE === 'true' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${cookieName}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(sessionTtlMs / 1000)}${secure}`);
+}
+
+function clearSessionCookie(res) {
+  const secure = process.env.SESSION_SECURE_COOKIE === 'true' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${cookieName}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`);
+}
+
+function currentSession(req) {
+  const token = sessionToken(req);
+  const session = sessions.get(token);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    sessions.delete(token);
+    return null;
+  }
+  return { token, ...session };
+}
+
+function requireAuth(req, res, next) {
+  const session = currentSession(req);
+  if (!session) return res.status(401).json({ error: 'Inicia sesión para continuar.' });
+  req.authSession = session;
+  return next();
 }
 
 async function availableQnas() {
@@ -182,6 +238,45 @@ function createZip(files) {
 app.use(cors());
 app.use(express.json());
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+app.get('/api/auth/session', (req, res) => {
+  const session = currentSession(req);
+  return res.json({ configured: authIsConfigured(), authenticated: Boolean(session), username: session?.username || '' });
+});
+app.post('/api/auth/login', (req, res) => {
+  if (!authIsConfigured()) {
+    return res.status(503).json({ error: 'Configura APP_USERNAME y APP_PASSWORD (mínimo 12 caracteres) en .env y reinicia la aplicación.' });
+  }
+  const address = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const attempt = loginAttempts.get(address);
+  if (attempt && now - attempt.startedAt < loginWindowMs && attempt.count >= maxLoginAttempts) {
+    const seconds = Math.ceil((loginWindowMs - (now - attempt.startedAt)) / 1000);
+    return res.status(429).json({ error: `Demasiados intentos. Vuelve a probar en ${seconds} segundos.` });
+  }
+  if (!attempt || now - attempt.startedAt >= loginWindowMs) loginAttempts.set(address, { startedAt: now, count: 0 });
+  const credentials = authCredentials();
+  const usernameMatches = safeEqual(credentials.username, req.body?.username);
+  const passwordMatches = safeEqual(credentials.password, req.body?.password);
+  if (!usernameMatches || !passwordMatches) {
+    const current = loginAttempts.get(address);
+    current.count += 1;
+    return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+  }
+  loginAttempts.delete(address);
+  const token = randomBytes(32).toString('base64url');
+  const expiresAt = now + sessionTtlMs;
+  for (const [key, value] of sessions) if (value.expiresAt <= now) sessions.delete(key);
+  sessions.set(token, { username: credentials.username, expiresAt });
+  setSessionCookie(res, token);
+  return res.json({ authenticated: true, username: credentials.username });
+});
+app.post('/api/auth/logout', (req, res) => {
+  const token = sessionToken(req);
+  if (token) sessions.delete(token);
+  clearSessionCookie(res);
+  return res.json({ authenticated: false });
+});
+app.use('/api', requireAuth);
 app.get('/api/layouts', (_req, res) => res.json(sections.map(({ id, title }) => ({ id, title }))));
 app.get('/api/qnas', async (_req, res) => {
   try {
@@ -254,4 +349,4 @@ if (process.env.NODE_ENV === 'production') {
   app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 
-app.listen(port, () => console.log(`Servidor SIGED disponible en http://localhost:${port}`));
+app.listen(port, host, () => console.log(`Servidor SIGED disponible en http://${host}:${port}`));

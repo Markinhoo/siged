@@ -1,6 +1,6 @@
 # Exportador de layouts SIGED
 
-Aplicación React con un servidor Express que ejecuta los cinco SELECT del archivo `queries.txt` contra SQL Server. Cada layout se genera sin encabezado y con columnas separadas por `|`. Puedes elegir un nombre por archivo y descargarlo como TXT o como ZIP que contiene ese TXT. Al usar “Generar los 5 TXT”, se descarga un ZIP único con el nombre de carpeta elegido y los cinco TXT con sus nombres personalizados.
+Aplicación React con un servidor Express que ejecuta los cinco SELECT del archivo `queries.txt` contra SQL Server. El login protege las rutas de consulta y los resultados. Cada layout se genera sin encabezado y con columnas separadas por `|`. Puedes elegir un nombre por archivo y descargarlo como TXT o como ZIP que contiene ese TXT. Al usar “Generar los 5 TXT”, se descarga un ZIP único con el nombre de carpeta elegido y los cinco TXT con sus nombres personalizados.
 
 ## Requisitos
 
@@ -12,15 +12,16 @@ Aplicación React con un servidor Express que ejecuta los cinco SELECT del archi
 
 1. Copia `.env.example` como `.env`.
 2. Completa `DB_SERVER`, `DB_PORT`, `DB_DATABASE`, `DB_USER` y `DB_PASSWORD` con los datos de la conexión existente. No pongas estas credenciales en React ni las compartas en el navegador.
-3. Ajusta `DB_ENCRYPT` y `DB_TRUST_SERVER_CERTIFICATE` a la configuración de tu servidor.
-4. Instala dependencias y arranca la aplicación:
+3. Configura `APP_USERNAME` y `APP_PASSWORD`; la contraseña debe tener al menos 12 caracteres. El login se protege con una cookie HTTP-only y la sesión dura 8 horas. No uses la contraseña de SQL Server como contraseña del sitio.
+4. Ajusta `DB_ENCRYPT`, `DB_TRUST_SERVER_CERTIFICATE` y `SESSION_SECURE_COOKIE`. Para publicar el sitio en una red, usa HTTPS y establece `SESSION_SECURE_COOKIE=true`.
+5. Instala dependencias y arranca la aplicación:
 
    ```sh
    npm install
    npm run dev
    ```
 
-   Abre la dirección local que Vite muestra en la terminal. Para usarla en una red, ejecuta el servidor en un equipo al que los usuarios puedan acceder y asegúrate de que ese equipo tenga acceso a SQL Server.
+   Abre la dirección local que Vite muestra en la terminal. La app escucha en localhost por defecto. Para acceso desde otros equipos, publícala detrás de un proxy HTTPS y configura `HOST` para el servidor; no la expongas directamente por HTTP en una red.
 
    En desarrollo, el supervisor reinicia el servidor si el proceso termina inesperadamente y al cambiar el SQL, el código del servidor o `.env`. Cerrar la pestaña del navegador no detiene el servidor; usa `Ctrl+C` en la terminal para detener toda la aplicación.
 

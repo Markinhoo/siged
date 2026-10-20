@@ -10,12 +10,53 @@ const layouts = [
   { id: 'SP5', name: 'PAGOS_NÓMINA', desc: 'Pagos de nómina', icon: '$' },
 ];
 
+function ThemeButton({ theme, onToggle }) {
+  return <button className="theme-toggle" type="button" onClick={onToggle} aria-label={theme === 'light' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'} title={theme === 'light' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'}>
+    <span aria-hidden="true">{theme === 'light' ? '☾' : '☀'}</span>
+    <span>{theme === 'light' ? 'Oscuro' : 'Claro'}</span>
+  </button>;
+}
+
+function AuthScreen({ theme, onToggleTheme, configured, error, username, setUsername, password, setPassword, busy, onSubmit }) {
+  return <main className="shell auth-page">
+    <header className="topbar">
+      <a className="brand" href="#inicio" aria-label="SIGED">
+        <span className="brand-mark">S</span><span className="brand-name">SIGED<span className="brand-sub">· EXPORTADOR</span></span>
+      </a>
+      <ThemeButton theme={theme} onToggle={onToggleTheme} />
+    </header>
+    {configured ? <form className="login-card" onSubmit={onSubmit}>
+      <div className="login-lock" aria-hidden="true">⌑</div>
+      <div className="eyebrow"><span>ACCESO PROTEGIDO</span></div>
+      <h1>Iniciar sesión</h1>
+      <p className="login-intro">Ingresa tus credenciales para acceder a los layouts de nómina.</p>
+      <label htmlFor="login-user">USUARIO</label>
+      <input id="login-user" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required />
+      <label htmlFor="login-password">CONTRASEÑA</label>
+      <input id="login-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+      {error && <p className="login-error" role="alert">{error}</p>}
+      <button className="primary-button login-submit" disabled={busy || !username || !password}>{busy ? <><span className="spinner" /> Verificando…</> : 'Entrar'}</button>
+    </form> : <section className="login-card setup-card">
+      <div className="login-lock" aria-hidden="true">⌑</div>
+      <div className="eyebrow"><span>CONFIGURACIÓN REQUERIDA</span></div>
+      <h1>Configura el acceso</h1>
+      <p className="login-intro">Agrega `APP_USERNAME` y una contraseña de al menos 12 caracteres en el archivo `.env`, luego reinicia la aplicación.</p>
+      {error && <p className="login-error" role="alert">{error}</p>}
+    </section>}
+  </main>;
+}
+
 function App() {
   const [qna, setQna] = useState('202616');
   const [qnas, setQnas] = useState([]);
   const [qnaLoading, setQnaLoading] = useState(true);
   const [qnaError, setQnaError] = useState('');
   const [qnaRefresh, setQnaRefresh] = useState(0);
+  const [auth, setAuth] = useState({ loading: true, configured: false, authenticated: false, username: '', error: '' });
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('siged-theme') || 'light');
   const [fileNames, setFileNames] = useState({});
   const [formats, setFormats] = useState({});
@@ -31,6 +72,24 @@ function App() {
 
   useEffect(() => {
     let active = true;
+    fetch('/api/auth/session')
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || `Error HTTP ${response.status}`);
+        return data;
+      })
+      .then((data) => { if (active) setAuth({ ...data, loading: false, error: '' }); })
+      .catch((error) => { if (active) setAuth({ loading: false, configured: false, authenticated: false, username: '', error: `No se pudo conectar con el servidor: ${error.message}` }); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    if (!auth.authenticated) {
+      setQnaLoading(false);
+      setQnas([]);
+      return () => { active = false; };
+    }
     setQnaLoading(true);
     setQnaError('');
     fetch('/api/qnas')
@@ -52,7 +111,39 @@ function App() {
       })
       .finally(() => { if (active) setQnaLoading(false); });
     return () => { active = false; };
-  }, [qnaRefresh]);
+  }, [qnaRefresh, auth.authenticated]);
+
+  async function submitLogin(event) {
+    event.preventDefault();
+    setLoginBusy(true);
+    setLoginError('');
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Error HTTP ${response.status}`);
+      setLoginPassword('');
+      setAuth({ loading: false, configured: true, authenticated: true, username: data.username, error: '' });
+    } catch (error) {
+      setLoginError(error.message);
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    setAuth((current) => ({ ...current, authenticated: false, username: '' }));
+    setQnas([]);
+    setQna('');
+  }
+
+  const toggleTheme = () => setTheme((current) => current === 'light' ? 'dark' : 'light');
+
+  if (auth.loading) return <main className="shell auth-page"><p className="auth-loading">Verificando acceso…</p></main>;
+  if (!auth.authenticated) return <AuthScreen theme={theme} onToggleTheme={toggleTheme} configured={auth.configured || Boolean(auth.error)} error={loginError || auth.error} username={loginUsername} setUsername={setLoginUsername} password={loginPassword} setPassword={setLoginPassword} busy={loginBusy} onSubmit={submitLogin} />;
 
   async function run(layout) {
     const format = formats[layout.id] || 'txt';
@@ -129,10 +220,8 @@ function App() {
       </a>
       <div className="top-actions">
         <span className="top-label"><span className="live-dot" /> Herramienta de layouts</span>
-        <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={theme === 'light' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'} title={theme === 'light' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'}>
-          <span aria-hidden="true">{theme === 'light' ? '☾' : '☀'}</span>
-          <span>{theme === 'light' ? 'Oscuro' : 'Claro'}</span>
-        </button>
+        <ThemeButton theme={theme} onToggle={toggleTheme} />
+        <button className="logout-button" type="button" onClick={logout}>Salir</button>
       </div>
     </header>
 
