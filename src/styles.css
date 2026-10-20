@@ -8,3 +8,28 @@
 
 @media(max-width:760px){.qna-panel{flex-wrap:wrap}.bundle-actions{flex-basis:100%}.bundle-field{max-width:none}.layout-card{display:grid;grid-template-columns:22px 35px minmax(0,1fr);align-items:center;column-gap:10px;row-gap:8px}.number{width:auto}.layout-icon{width:35px;height:35px}.layout-info{grid-column:3;min-width:0}.layout-tools{grid-column:3;width:100%;margin:0}}
 @media(max-width:640px){.bundle-actions{flex-direction:column;align-items:stretch}.bundle-field{width:100%;max-width:none}.bundle-field input{height:40px}.layout-card{grid-template-columns:18px 31px minmax(0,1fr);column-gap:8px}.layout-icon{width:31px;height:31px}.file-name-input{flex:1}.download-button{min-width:75px}}
+
+/* Tema seleccionable */
+html[data-theme="dark"] body{background:#111815;color:#e6eee9}
+html[data-theme="dark"] .topbar,html[data-theme="dark"] footer{border-color:#2a3730}
+html[data-theme="dark"] .brand-name,html[data-theme="dark"] .intro h1,html[data-theme="dark"] .section-heading h2,html[data-theme="dark"] .layout-title h3{color:#e6eee9}
+html[data-theme="dark"] .brand-sub,html[data-theme="dark"] .top-label,html[data-theme="dark"] .lead,html[data-theme="dark"] .section-heading p,html[data-theme="dark"] .layout-info>p,html[data-theme="dark"] footer,html[data-theme="dark"] .help{color:#9aa9a0}
+html[data-theme="dark"] .qna-panel,html[data-theme="dark"] .layout-card{background:#19221d;border-color:#2b3931;box-shadow:0 3px 13px #0002}
+html[data-theme="dark"] .input-box,html[data-theme="dark"] .bundle-field input,html[data-theme="dark"] .file-name-input,html[data-theme="dark"] .layout-tools select,html[data-theme="dark"] .download-button{background:#141c17;border-color:#35453b;color:#e2ece5}
+html[data-theme="dark"] .input-box input{color:#e2ece5}
+html[data-theme="dark"] .layout-icon{background:#23372b;color:#69bd8b}
+html[data-theme="dark"] .layout-title>span,html[data-theme="dark"] .number,html[data-theme="dark"] .count-pill,html[data-theme="dark"] .format-tag{color:#93a69a}
+html[data-theme="dark"] .count-pill{background:#19221d;border-color:#34443a}
+html[data-theme="dark"] .download-button:hover:not(:disabled){background:#203629;border-color:#4d8863;color:#a5d8b7}
+html[data-theme="dark"] .theme-toggle{background:#23372b;border-color:#3a5644;color:#d8eadf}
+html[data-theme="dark"] .eyebrow,html[data-theme="dark"] label{color:#a3b1a8}
+html[data-theme="dark"] .eyebrow span,html[data-theme="dark"] .intro h1 em{color:#6cc28d}
+
+.top-actions{display:flex;align-items:center;gap:17px}.theme-toggle{height:31px;display:flex;align-items:center;gap:7px;padding:0 10px;background:#fff;border:1px solid #dce4de;border-radius:6px;color:#53645a;font:11px 'DM Sans',sans-serif;cursor:pointer;transition:all .15s}.theme-toggle:hover{border-color:#72a987;color:#176e4a}.theme-toggle span:first-child{font-size:15px;line-height:1}
+
+/* Ahorra altura para mantener todos los layouts a la vista en escritorio. */
+@media(min-width:761px) and (min-height:680px){.topbar{height:60px}.intro{padding:26px 0 18px}.intro h1{font-size:35px;margin:10px 0 5px}.qna-panel{padding:14px 18px}.section-heading{margin:24px 0 10px}.layout-list{gap:6px}.layout-card{min-height:62px;padding:8px 12px}.layout-icon{width:32px;height:32px}.layout-info>p{margin-top:3px}footer{margin-top:17px;padding:10px 0 16px}}
+@media(min-width:761px) and (min-height:680px) and (max-height:760px){.intro{padding:20px 0 14px}.intro h1{font-size:31px}.qna-panel{padding:11px 16px}.section-heading{margin:17px 0 8px}.layout-card{min-height:55px;padding:6px 10px}.layout-icon{width:29px;height:29px}footer{margin-top:10px;padding:8px 0 10px}}
+
+/* Oculta la barra visual; el desplazamiento táctil sigue disponible en pantallas pequeñas. */
+html,body{scrollbar-width:none}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}

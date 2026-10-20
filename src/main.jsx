@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
@@ -12,12 +12,18 @@ const layouts = [
 
 function App() {
   const [qna, setQna] = useState('202616');
+  const [theme, setTheme] = useState(() => localStorage.getItem('siged-theme') || 'light');
   const [fileNames, setFileNames] = useState({});
   const [formats, setFormats] = useState({});
   const [bundleName, setBundleName] = useState('');
   const [busy, setBusy] = useState({});
   const [status, setStatus] = useState({});
   const valid = /^\d{4}(0[1-9]|1[0-9]|2[0-4]|99)$/.test(qna);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('siged-theme', theme);
+  }, [theme]);
 
   async function run(layout) {
     const format = formats[layout.id] || 'txt';
@@ -92,7 +98,13 @@ function App() {
       <a className="brand" href="#inicio" aria-label="Inicio SIGED">
         <span className="brand-mark">S</span><span className="brand-name">SIGED<span className="brand-sub">· EXPORTADOR</span></span>
       </a>
-      <span className="top-label"><span className="live-dot" /> Herramienta de layouts</span>
+      <div className="top-actions">
+        <span className="top-label"><span className="live-dot" /> Herramienta de layouts</span>
+        <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={theme === 'light' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'} title={theme === 'light' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'}>
+          <span aria-hidden="true">{theme === 'light' ? '☾' : '☀'}</span>
+          <span>{theme === 'light' ? 'Oscuro' : 'Claro'}</span>
+        </button>
+      </div>
     </header>
 
     <section className="intro" id="inicio">
