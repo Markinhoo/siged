@@ -26,6 +26,6 @@ Para publicar una compilación, ejecuta `npm run build` y después `npm start` c
 
 ## QNA y layouts
 
-La QNA se captura en formato `AAAAQQ` (por ejemplo `202616`). Se aplica al parámetro de proceso de SP2, SP3 y SP4, y a los nombres de tablas `cc_YYYYQQ` y `ccd_YYYYQQ` del SP5. En SP1 se conserva `QNA_FIN>=202601`; en SP2 también se conserva `a.qna_fin >= 202401`, como indica el SQL original. La app permite generar un layout o los cinco.
+El selector de QNA se llena consultando en `sirhdb.dbo` los sufijos disponibles en tablas `cc_YYYYQQ` que también tengan su tabla `ccd_YYYYQQ` correspondiente. La selección se vuelve a validar en el servidor antes de ejecutar cualquier layout. En SP2, SP3 y SP4 se usa como quincena de proceso; en SP5 forma los nombres de tablas `cc_YYYYQQ` y `ccd_YYYYQQ`. En SP1 se conserva `QNA_FIN>=202601`; en SP2 también se conserva `a.qna_fin >= 202401`, como indica el SQL original. La app permite generar un layout o los cinco.
 
 Los valores nulos salen vacíos. Los pipes o saltos de línea que formen parte de un valor se sustituyen por espacios para preservar una fila por registro y el delimitador `|`. Verifica este comportamiento con quien consuma el layout si esas cadenas pudieran ser datos válidos.

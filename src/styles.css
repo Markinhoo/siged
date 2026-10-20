@@ -33,3 +33,5 @@ html[data-theme="dark"] .eyebrow span,html[data-theme="dark"] .intro h1 em{color
 
 /* Oculta la barra visual; el desplazamiento táctil sigue disponible en pantallas pequeñas. */
 html,body{scrollbar-width:none}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}
+.input-box select{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#1c2b23;font:600 15px 'DM Mono',monospace;letter-spacing:.04em;cursor:pointer}.qna-refresh{width:25px;height:25px;flex:none;border:0;border-radius:5px;background:transparent;color:#37885b;font-size:19px;line-height:1;cursor:pointer}.qna-refresh:hover:not(:disabled){background:#edf5ef}.qna-refresh:disabled{opacity:.45;cursor:wait}
+html[data-theme="dark"] .input-box select{color:#e2ece5}html[data-theme="dark"] .input-box select option{background:#19221d;color:#e2ece5}html[data-theme="dark"] .qna-refresh{color:#7bc697}html[data-theme="dark"] .qna-refresh:hover:not(:disabled){background:#23372b}

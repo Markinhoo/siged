@@ -51,6 +51,28 @@ function getPool() {
   return poolPromise;
 }
 
+async function availableQnas() {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT SUBSTRING(t.name, 4, 6) AS qna
+    FROM sirhdb.sys.tables AS t
+    INNER JOIN sirhdb.sys.schemas AS s ON s.schema_id = t.schema_id
+    WHERE s.name = N'dbo'
+      AND t.name LIKE N'cc[_][0-9][0-9][0-9][0-9][0-9][0-9]'
+      AND TRY_CONVERT(int, SUBSTRING(t.name, 4, 6)) IS NOT NULL
+      AND SUBSTRING(t.name, 8, 2) IN (N'99', N'01', N'02', N'03', N'04', N'05', N'06', N'07', N'08', N'09', N'10', N'11', N'12', N'13', N'14', N'15', N'16', N'17', N'18', N'19', N'20', N'21', N'22', N'23', N'24')
+      AND EXISTS (
+        SELECT 1
+        FROM sirhdb.sys.tables AS d
+        INNER JOIN sirhdb.sys.schemas AS ds ON ds.schema_id = d.schema_id
+        WHERE ds.name = N'dbo'
+          AND d.name = N'ccd_' + SUBSTRING(t.name, 4, 6)
+      )
+    ORDER BY TRY_CONVERT(int, SUBSTRING(t.name, 4, 6)) DESC
+  `);
+  return result.recordset.map((row) => String(row.qna).trim());
+}
+
 function prepareSql(section, qna) {
   let text = sectionSql(section);
   // QNA se valida como YYYYQQ antes de interpolarla en los layouts de proceso
@@ -161,6 +183,14 @@ app.use(cors());
 app.use(express.json());
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/layouts', (_req, res) => res.json(sections.map(({ id, title }) => ({ id, title }))));
+app.get('/api/qnas', async (_req, res) => {
+  try {
+    return res.json({ qnas: await availableQnas() });
+  } catch (error) {
+    console.error('Consulta de QNA disponibles:', error);
+    return res.status(500).json({ error: error.message || 'No se pudieron consultar las QNA disponibles.' });
+  }
+});
 
 app.post('/api/run-all', async (req, res) => {
   const qna = String(req.body?.qna ?? '');
@@ -169,6 +199,9 @@ app.post('/api/run-all', async (req, res) => {
   }
   const bundleName = safeBaseName(req.body?.bundleName, `SIGED_QNA_${qna}`);
   try {
+    if (!(await availableQnas()).includes(qna)) {
+      return res.status(409).json({ error: `No existe el periodo ${qna} con las tablas cc_${qna} y ccd_${qna} en sirhdb.dbo.` });
+    }
     const results = [];
     for (const section of sections) {
       const { output, rowCount } = await executeLayout(section, qna);
@@ -198,6 +231,9 @@ app.post('/api/run/:id', async (req, res) => {
   const fileName = safeBaseName(req.body?.fileName, `${section.id}_${qna}`);
   const format = req.body?.format === 'zip' ? 'zip' : 'txt';
   try {
+    if (!(await availableQnas()).includes(qna)) {
+      return res.status(409).json({ error: `No existe el periodo ${qna} con las tablas cc_${qna} y ccd_${qna} en sirhdb.dbo.` });
+    }
     const { output, rowCount } = await executeLayout(section, qna);
     if (format === 'zip') {
       const zip = createZip([{ name: `${fileName}.txt`, output }]);

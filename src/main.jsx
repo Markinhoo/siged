@@ -12,18 +12,47 @@ const layouts = [
 
 function App() {
   const [qna, setQna] = useState('202616');
+  const [qnas, setQnas] = useState([]);
+  const [qnaLoading, setQnaLoading] = useState(true);
+  const [qnaError, setQnaError] = useState('');
+  const [qnaRefresh, setQnaRefresh] = useState(0);
   const [theme, setTheme] = useState(() => localStorage.getItem('siged-theme') || 'light');
   const [fileNames, setFileNames] = useState({});
   const [formats, setFormats] = useState({});
   const [bundleName, setBundleName] = useState('');
   const [busy, setBusy] = useState({});
   const [status, setStatus] = useState({});
-  const valid = /^\d{4}(0[1-9]|1[0-9]|2[0-4]|99)$/.test(qna);
+  const valid = qnas.includes(qna);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('siged-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    let active = true;
+    setQnaLoading(true);
+    setQnaError('');
+    fetch('/api/qnas')
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || `Error HTTP ${response.status}`);
+        return data.qnas || [];
+      })
+      .then((available) => {
+        if (!active) return;
+        setQnas(available);
+        setQna((current) => available.includes(current) ? current : (available[0] || ''));
+      })
+      .catch((error) => {
+        if (!active) return;
+        setQnas([]);
+        setQna('');
+        setQnaError(error.message);
+      })
+      .finally(() => { if (active) setQnaLoading(false); });
+    return () => { active = false; };
+  }, [qnaRefresh]);
 
   async function run(layout) {
     const format = formats[layout.id] || 'txt';
@@ -116,12 +145,15 @@ function App() {
     <section className="qna-panel" aria-label="Quincena de proceso">
       <div className="field-wrap">
         <label htmlFor="qna">QUINCENA DE PROCESO <span className="required">*</span></label>
-        <div className={`input-box ${qna && !valid ? 'invalid' : ''}`}>
+        <div className={`input-box ${!qnaLoading && !valid && qnaError ? 'invalid' : ''}`}>
           <span className="calendar-icon">▦</span>
-          <input id="qna" inputMode="numeric" maxLength={6} value={qna} onChange={(event) => setQna(event.target.value.replace(/\D/g, '').slice(0, 6))} aria-describedby="qna-help" />
-          <span className="format-tag">AAAAQQ</span>
+          <select id="qna" value={qna} disabled={qnaLoading || !qnas.length} onChange={(event) => setQna(event.target.value)} aria-describedby="qna-help">
+            {!qnas.length && <option value="">{qnaLoading ? 'Consultando periodos…' : 'Sin periodos disponibles'}</option>}
+            {qnas.map((period) => <option key={period} value={period}>{period}</option>)}
+          </select>
+          <button className="qna-refresh" type="button" onClick={() => setQnaRefresh((value) => value + 1)} disabled={qnaLoading} aria-label="Actualizar periodos" title="Volver a consultar las tablas disponibles">↻</button>
         </div>
-        <p id="qna-help" className={qna && !valid ? 'help error-text' : 'help'}>{qna && !valid ? 'Usa el formato AAAAQQ, por ejemplo 202616.' : 'Ejemplo: 202616 corresponde al año 2026, quincena 16.'}</p>
+        <p id="qna-help" className={qnaError ? 'help error-text' : 'help'}>{qnaError || (qnaLoading ? 'Leyendo tablas cc_ y ccd_ en sirhdb.dbo…' : qnas.length ? `${qnas.length} periodos encontrados en sirhdb.dbo.` : 'No se encontraron periodos con las tablas cc_ y ccd_ requeridas.')}</p>
       </div>
       <div className="bundle-actions">
         <div className="bundle-field">
