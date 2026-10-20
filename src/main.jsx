@@ -227,7 +227,7 @@ function App() {
 
     <section className="intro" id="inicio">
       <div className="eyebrow"><span>PROCESO DE NÓMINA</span><i /> CINCO ARCHIVOS DE SALIDA</div>
-      <h1>Exportador de <em>layouts</em></h1>
+      <h1>Creación de <em>layouts</em></h1>
       <p className="lead">Selecciona la quincena de proceso y genera los archivos de texto listos para integrar en SIGED.</p>
     </section>
 
