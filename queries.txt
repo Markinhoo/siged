@@ -89,7 +89,7 @@ and a.subunidad = hpct.subunidad
 and a.cat_puesto = hpct.cat_puesto
 and a.horas = hpct.horas
 and a.cons_plaza = hpct.cons_plaza
-AND a.qna_fin>=202501 -- Filtro fijo de SP2; no cambiar con la QNA de proceso.
+AND a.qna_fin>=202401 -- Filtro fijo de SP2; no cambiar con la QNA de proceso.
 AND a.qna_fin BETWEEN hpct.qna_ini AND hpct.qna_fin
 and hpct.ent_fed = ct.ent_fed
 and hpct.ct_clasif = ct.ct_clasif
