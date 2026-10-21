@@ -10,6 +10,30 @@ const layouts = [
   { id: 'SP5', name: 'PAGOS_NÓMINA', desc: 'Pagos de nómina', icon: '$' },
 ];
 
+async function requestExport(url, payload) {
+  let requestBody = payload;
+  let response = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+  });
+  if (response.status === 422) {
+    const warning = await response.json().catch(() => ({}));
+    if (!warning.warning) throw new Error(warning.error || 'Error al validar el layout.');
+    const confirmed = window.confirm(`${warning.error}\n\nSi cancelas, puedes corregir los datos en SQL. ¿Deseas descargar de todas formas?`);
+    if (!confirmed) return null;
+    requestBody = { ...payload, allowNulls: true };
+    response = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || `Error HTTP ${response.status}`);
+  }
+  return response;
+}
+
 function ThemeButton({ theme, onToggle }) {
   return <button className="theme-toggle" type="button" onClick={onToggle} aria-label={theme === 'light' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'} title={theme === 'light' ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro'}>
     <span aria-hidden="true">{theme === 'light' ? '☾' : '☀'}</span>
@@ -154,13 +178,10 @@ function App() {
     setBusy((current) => ({ ...current, [layout.id]: true }));
     setStatus((current) => ({ ...current, [layout.id]: { type: 'loading', message: 'Ejecutando consulta…' } }));
     try {
-      const response = await fetch(`/api/run/${layout.id}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qna, fileName: fileNames[layout.id], format }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Error HTTP ${response.status}`);
+      const response = await requestExport(`/api/run/${layout.id}`, { qna, fileName: fileNames[layout.id], format });
+      if (!response) {
+        setStatus((current) => ({ ...current, [layout.id]: { type: 'error', message: 'Descarga cancelada para corregir los datos de SP5.' } }));
+        return;
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -186,13 +207,12 @@ function App() {
     setBusy(Object.fromEntries(layouts.map(({ id }) => [id, true])));
     setStatus(Object.fromEntries(layouts.map(({ id }) => [id, { type: 'loading', message: 'Ejecutando consulta…' }])));
     try {
-      const response = await fetch('/api/run-all', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qna, bundleName, fileNames }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || `Error HTTP ${response.status}`);
+      const response = await requestExport('/api/run-all', { qna, bundleName, fileNames });
+      if (!response) {
+        setStatus(Object.fromEntries(layouts.map(({ id }) => [id, {
+          type: 'error', message: 'Generación cancelada para corregir los datos señalados en SP5.',
+        }])));
+        return;
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);

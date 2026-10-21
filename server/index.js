@@ -153,7 +153,7 @@ function nullLiteralError(issues) {
   const examples = issues.slice(0, 30).map(({ row, payroll, field }) =>
     `fila ${row}${payroll ? ` (nómina ${payroll})` : ''}: ${field}`);
   const remainder = issues.length > examples.length ? ` y ${issues.length - examples.length} más` : '';
-  return `SP5 no se generó: hay ${issues.length} campo(s) con el texto NULL. Corrige los datos de origen en SQL y vuelve a intentar. ${examples.join('; ')}${remainder}.`;
+  return `SP5 contiene ${issues.length} campo(s) con el texto NULL. Corrige los datos en SQL antes de cargar el layout. ${examples.join('; ')}${remainder}.`;
 }
 
 function safeBaseName(value, fallback) {
@@ -323,7 +323,9 @@ app.post('/api/run-all', async (req, res) => {
       layoutCounts.push(rowCount);
       if (section.id === 'SP5') {
         const issues = findNullLiteralIssues(rows);
-        if (issues.length) return res.status(422).json({ error: nullLiteralError(issues) });
+        if (issues.length && req.body?.allowNulls !== true) {
+          return res.status(422).json({ warning: true, error: nullLiteralError(issues) });
+        }
       }
       if (section.id === 'SP4' && rowCount === 0) {
         continue;
@@ -360,7 +362,9 @@ app.post('/api/run/:id', async (req, res) => {
     const { output, rowCount, rows } = await executeLayout(section, qna);
     if (section.id === 'SP5') {
       const issues = findNullLiteralIssues(rows);
-      if (issues.length) return res.status(422).json({ error: nullLiteralError(issues) });
+      if (issues.length && req.body?.allowNulls !== true) {
+        return res.status(422).json({ warning: true, error: nullLiteralError(issues) });
+      }
     }
     if (format === 'zip') {
       const zip = createZip([{ name: `${fileName}.txt`, output }]);
