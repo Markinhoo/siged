@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
@@ -11,27 +11,53 @@ const layouts = [
 ];
 
 async function requestExport(url, payload) {
-  let requestBody = payload;
-  let response = await fetch(url, {
+  const response = await fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify(payload),
   });
-  if (response.status === 422) {
-    const warning = await response.json().catch(() => ({}));
-    if (!warning.warning) throw new Error(warning.error || 'Error al validar el layout.');
-    const confirmed = window.confirm(`${warning.error}\n\nSi cancelas, puedes corregir los datos en SQL. ¿Deseas descargar de todas formas?`);
-    if (!confirmed) return null;
-    requestBody = { ...payload, allowNulls: true };
-    response = await fetch(url, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
-  }
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
+    if (data.needsCorrection) return { correction: data };
     throw new Error(data.error || `Error HTTP ${response.status}`);
   }
-  return response;
+  return { response };
+}
+
+function unresolvedSp5Fields(text) {
+  const requiredIndexes = new Set([5, 9, 10, 11]);
+  const unresolved = [];
+  const separators = text.match(/\r\n|\n|\r/g) || [];
+  let offset = 0;
+  const lines = text.split(/\r\n|\n|\r/);
+  lines.forEach((line, lineIndex) => {
+    if (line) {
+      const fields = line.split('|');
+      let fieldOffset = 0;
+      fields.forEach((field, index) => {
+        const trimmed = field.trim();
+        if (trimmed.toUpperCase() === 'NULL') {
+          unresolved.push({ start: offset + fieldOffset + field.indexOf(trimmed), end: offset + fieldOffset + field.indexOf(trimmed) + trimmed.length });
+        } else if (requiredIndexes.has(index) && !trimmed) {
+          unresolved.push({ start: offset + fieldOffset, end: offset + fieldOffset });
+        }
+        fieldOffset += field.length + 1;
+      });
+    }
+    offset += line.length + (separators[lineIndex]?.length || 0);
+  });
+  return unresolved;
+}
+
+async function downloadResponse(response, fileName) {
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function ThemeButton({ theme, onToggle }) {
@@ -87,7 +113,22 @@ function App() {
   const [bundleName, setBundleName] = useState('');
   const [busy, setBusy] = useState({});
   const [status, setStatus] = useState({});
+  const [sp5Editor, setSp5Editor] = useState(null);
+  const [sp5EditorError, setSp5EditorError] = useState('');
+  const [sp5EditorBusy, setSp5EditorBusy] = useState(false);
+  const sp5EditorRef = useRef(null);
   const valid = qnas.includes(qna);
+
+  useEffect(() => {
+    if (!sp5Editor) return;
+    requestAnimationFrame(() => {
+      const editor = sp5EditorRef.current;
+      if (!editor) return;
+      const position = unresolvedSp5Fields(sp5Editor.text)[0];
+      editor.focus();
+      if (position) editor.setSelectionRange(position.start, position.end);
+    });
+  }, [sp5Editor?.session]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -178,23 +219,16 @@ function App() {
     setBusy((current) => ({ ...current, [layout.id]: true }));
     setStatus((current) => ({ ...current, [layout.id]: { type: 'loading', message: 'Ejecutando consulta…' } }));
     try {
-      const response = await requestExport(`/api/run/${layout.id}`, { qna, fileName: fileNames[layout.id], format });
-      if (!response) {
-        setStatus((current) => ({ ...current, [layout.id]: { type: 'error', message: 'Descarga cancelada para corregir los datos de SP5.' } }));
+      const result = await requestExport(`/api/run/${layout.id}`, { qna, fileName: fileNames[layout.id], format });
+      if (result.correction) {
+        setSp5Editor({ session: Date.now(), origin: 'single', url: `/api/run/${layout.id}`, payload: { qna, fileName: fileNames[layout.id], format }, layoutId: layout.id, text: result.correction.sp5Text, message: result.correction.error });
+        setSp5EditorError('');
         return;
       }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
       const defaultName = `${layout.id}_${qna}`;
       const chosenName = (fileNames[layout.id] || defaultName).trim().replace(/\.(txt|zip)$/i, '') || defaultName;
-      anchor.download = `${chosenName}.${format}`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-      const count = response.headers.get('X-Row-Count');
+      await downloadResponse(result.response, `${chosenName}.${format}`);
+      const count = result.response.headers.get('X-Row-Count');
       setStatus((current) => ({ ...current, [layout.id]: { type: 'success', message: `${count ?? '—'} registros · ${format.toUpperCase()} generado` } }));
     } catch (error) {
       setStatus((current) => ({ ...current, [layout.id]: { type: 'error', message: error.message } }));
@@ -207,24 +241,15 @@ function App() {
     setBusy(Object.fromEntries(layouts.map(({ id }) => [id, true])));
     setStatus(Object.fromEntries(layouts.map(({ id }) => [id, { type: 'loading', message: 'Ejecutando consulta…' }])));
     try {
-      const response = await requestExport('/api/run-all', { qna, bundleName, fileNames });
-      if (!response) {
-        setStatus(Object.fromEntries(layouts.map(({ id }) => [id, {
-          type: 'error', message: 'Generación cancelada para corregir los datos señalados en SP5.',
-        }])));
+      const result = await requestExport('/api/run-all', { qna, bundleName, fileNames });
+      if (result.correction) {
+        setSp5Editor({ session: Date.now(), origin: 'all', url: '/api/run-all', payload: { qna, bundleName, fileNames }, text: result.correction.sp5Text, message: result.correction.error });
+        setSp5EditorError('');
         return;
       }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
       const chosenBundle = (bundleName || `SIGED_QNA_${qna}`).trim().replace(/\.(txt|zip)$/i, '');
-      anchor.download = `${chosenBundle}.zip`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-      const counts = (response.headers.get('X-Layout-Counts') || '').split(',');
+      await downloadResponse(result.response, `${chosenBundle}.zip`);
+      const counts = (result.response.headers.get('X-Layout-Counts') || '').split(',');
       setStatus(Object.fromEntries(layouts.map((layout, index) => [layout.id, {
         type: 'success', message: layout.id === 'SP4' && counts[index] === '0'
           ? '0 registros · omitido del ZIP'
@@ -234,6 +259,58 @@ function App() {
       setStatus(Object.fromEntries(layouts.map(({ id }) => [id, { type: 'error', message: error.message }])));
     } finally {
       setBusy({});
+    }
+  }
+
+  async function saveSp5Corrections() {
+    if (!sp5Editor) return;
+    if (!sp5Editor.text.trim()) {
+      setSp5EditorError('El TXT de SP5 no puede quedar vacío.');
+      return;
+    }
+    const unresolved = unresolvedSp5Fields(sp5Editor.text);
+    if (unresolved.length) {
+      setSp5EditorError(`Quedan ${unresolved.length} campos NULL o vacíos. Corrige el siguiente seleccionado para continuar.`);
+      const position = unresolved[0];
+      if (position && sp5EditorRef.current) {
+        sp5EditorRef.current.focus();
+        sp5EditorRef.current.setSelectionRange(position.start, position.end);
+      }
+      return;
+    }
+
+    setSp5EditorBusy(true);
+    setSp5EditorError('');
+    try {
+      const result = await requestExport(sp5Editor.url, { ...sp5Editor.payload, sp5Override: sp5Editor.text });
+      if (result.correction) {
+        setSp5Editor((current) => ({ ...current, session: Date.now(), text: result.correction.sp5Text, message: result.correction.error }));
+        setSp5EditorError(result.correction.error);
+        return;
+      }
+      if (sp5Editor.origin === 'all') {
+        const chosenBundle = (sp5Editor.payload.bundleName || `SIGED_QNA_${sp5Editor.payload.qna}`).trim().replace(/\.(txt|zip)$/i, '');
+        await downloadResponse(result.response, `${chosenBundle}.zip`);
+        const counts = (result.response.headers.get('X-Layout-Counts') || '').split(',');
+        setStatus(Object.fromEntries(layouts.map((layout, index) => [layout.id, {
+          type: 'success', message: layout.id === 'SP4' && counts[index] === '0'
+            ? '0 registros · omitido del ZIP'
+            : `${counts[index] || '—'} registros · incluido en el ZIP`,
+        }])));
+      } else {
+        const layoutId = sp5Editor.layoutId;
+        const format = sp5Editor.payload.format;
+        const defaultName = `${layoutId}_${sp5Editor.payload.qna}`;
+        const chosenName = (sp5Editor.payload.fileName || defaultName).trim().replace(/\.(txt|zip)$/i, '') || defaultName;
+        await downloadResponse(result.response, `${chosenName}.${format}`);
+        const count = result.response.headers.get('X-Row-Count');
+        setStatus((current) => ({ ...current, [layoutId]: { type: 'success', message: `${count ?? '—'} registros · ${format.toUpperCase()} generado con correcciones` } }));
+      }
+      setSp5Editor(null);
+    } catch (error) {
+      setSp5EditorError(error.message);
+    } finally {
+      setSp5EditorBusy(false);
     }
   }
 
@@ -306,6 +383,41 @@ function App() {
       })}
     </section>
     <footer><span>Sin encabezados y separado por |. El ZIP contiene los TXT con los nombres indicados.</span><span className="footer-code">SIGED <i>/</i> LAYOUTS</span></footer>
+
+    {sp5Editor && <div className="sp5-editor-backdrop">
+      <section className="sp5-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="sp5-editor-title">
+        <div className="sp5-editor-heading">
+          <div><span className="eyebrow"><span>REVISIÓN DE DATOS</span></span><h2 id="sp5-editor-title">Corregir archivo SP5</h2></div>
+          <button className="logout-button" type="button" onClick={() => {
+            if (sp5Editor.origin === 'all') {
+              setStatus(Object.fromEntries(layouts.map(({ id }) => [id, { type: 'error', message: 'Generación cancelada para corregir los datos de SP5.' }])));
+            } else {
+              setStatus((current) => ({ ...current, [sp5Editor.layoutId]: { type: 'error', message: 'Descarga cancelada para corregir los datos de SP5.' } }));
+            }
+            setSp5Editor(null);
+          }} disabled={sp5EditorBusy}>Cancelar</button>
+        </div>
+        <p className="sp5-editor-intro">{sp5Editor.message} El primer campo <code>NULL</code> está seleccionado. Corrige todos los valores en el TXT; al continuar se generará el archivo con tus cambios.</p>
+        <textarea
+          ref={sp5EditorRef}
+          className="sp5-editor-textarea"
+          value={sp5Editor.text}
+          onChange={(event) => {
+            setSp5Editor((current) => ({ ...current, text: event.target.value }));
+            setSp5EditorError('');
+          }}
+          spellCheck="false"
+          aria-label="Contenido del TXT SP5 para corregir"
+        />
+        {sp5EditorError && <p className="login-error sp5-editor-error" role="alert">{sp5EditorError}</p>}
+        <div className="sp5-editor-actions">
+          <span>{unresolvedSp5Fields(sp5Editor.text).length} campos NULL o vacíos pendientes</span>
+          <button className="primary-button" type="button" onClick={saveSp5Corrections} disabled={sp5EditorBusy}>
+            {sp5EditorBusy ? <><span className="spinner" /> Guardando…</> : sp5Editor.origin === 'all' ? 'Guardar cambios y generar ZIP' : 'Guardar cambios y descargar SP5'}
+          </button>
+        </div>
+      </section>
+    </div>}
   </main>;
 }
 

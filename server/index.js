@@ -25,6 +25,8 @@ const sessionTtlMs = 8 * 60 * 60 * 1000;
 const loginWindowMs = 15 * 60 * 1000;
 const maxLoginAttempts = 5;
 const cookieName = 'siged_session';
+const requiredSp5Fields = new Set(['CURP', 'PRIMER_APELLIDO', 'SEGUNDO_APELLIDO', 'NOMBRE']);
+const requiredSp5ColumnIndexes = [5, 9, 10, 11];
 
 function sectionSql(section) {
   const start = queryText.indexOf(section.start);
@@ -137,11 +139,12 @@ function prepareSql(section, qna) {
   return text;
 }
 
-function findNullLiteralIssues(rows) {
+function findSp5Issues(rows) {
   const issues = [];
   rows.forEach((row, index) => {
     for (const [field, value] of Object.entries(row)) {
-      if (value === null || value === undefined || (typeof value === 'string' && value.trim().toUpperCase() === 'NULL')) {
+      const missingRequired = requiredSp5Fields.has(field) && typeof value === 'string' && !value.trim();
+      if (value === null || value === undefined || missingRequired || (typeof value === 'string' && value.trim().toUpperCase() === 'NULL')) {
         issues.push({ row: index + 1, payroll: String(row.NUMERO_NOMINA ?? ''), field });
       }
     }
@@ -149,11 +152,21 @@ function findNullLiteralIssues(rows) {
   return issues;
 }
 
-function nullLiteralError(issues) {
+function sp5IssueError(issues) {
   const examples = issues.slice(0, 30).map(({ row, payroll, field }) =>
     `fila ${row}${payroll ? ` (nómina ${payroll})` : ''}: ${field}`);
   const remainder = issues.length > examples.length ? ` y ${issues.length - examples.length} más` : '';
-  return `SP5 contiene ${issues.length} campo(s) con valor NULL o faltante. Corrige los datos en SQL antes de cargar el layout. ${examples.join('; ')}${remainder}.`;
+  return `SP5 contiene ${issues.length} campo(s) con valor NULL o faltante. Corrige los datos antes de cargar el layout. ${examples.join('; ')}${remainder}.`;
+}
+
+function hasUnresolvedSp5Fields(text) {
+  if (!String(text).trim()) return true;
+  return String(text).split(/\r?\n/).some((line) => {
+    if (!line) return false;
+    const fields = line.split('|');
+    return fields.some((field) => field.trim().toUpperCase() === 'NULL') ||
+      requiredSp5ColumnIndexes.some((index) => !fields[index]?.trim());
+  });
 }
 
 function safeBaseName(value, fallback) {
@@ -174,8 +187,10 @@ async function executeLayout(section, qna) {
   const pool = await getPool();
   const result = await pool.request().query(prepareSql(section, qna));
   const rows = result.recordsets?.[0] ?? result.recordset ?? [];
-  const output = rows.map((row) => Object.values(row).map((value) => {
-    if (value === null || value === undefined) return section.id === 'SP5' ? 'NULL' : '';
+  const output = rows.map((row) => Object.entries(row).map(([field, value]) => {
+    if (value === null || value === undefined || (section.id === 'SP5' && requiredSp5Fields.has(field) && typeof value === 'string' && !value.trim())) {
+      return section.id === 'SP5' ? 'NULL' : '';
+    }
     return String(value).replace(/[|\r\n]/g, ' ');
   }).join('|')).join('\r\n');
   return { output, rowCount: rows.length, rows };
@@ -255,7 +270,7 @@ function createZip(files) {
 }
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/auth/session', (req, res) => {
   const session = currentSession(req);
@@ -321,17 +336,29 @@ app.post('/api/run-all', async (req, res) => {
     for (const section of sections) {
       const { output, rowCount, rows } = await executeLayout(section, qna);
       layoutCounts.push(rowCount);
+      let layoutOutput = output;
       if (section.id === 'SP5') {
-        const issues = findNullLiteralIssues(rows);
-        if (issues.length && req.body?.allowNulls !== true) {
-          return res.status(422).json({ warning: true, error: nullLiteralError(issues) });
+        if (typeof req.body?.sp5Override === 'string') {
+          if (hasUnresolvedSp5Fields(req.body.sp5Override)) {
+            return res.status(422).json({
+              needsCorrection: true,
+              error: 'Todavía hay campos NULL o vacíos en datos obligatorios de SP5. Corrígelos para continuar.',
+              sp5Text: req.body.sp5Override,
+            });
+          }
+          layoutOutput = req.body.sp5Override;
+        } else {
+          const issues = findSp5Issues(rows);
+          if (issues.length) {
+            return res.status(422).json({ needsCorrection: true, error: sp5IssueError(issues), sp5Text: output });
+          }
         }
       }
       if (section.id === 'SP4' && rowCount === 0) {
         continue;
       }
       const fileName = safeBaseName(req.body?.fileNames?.[section.id], `${section.id}_${qna}`);
-      results.push({ name: `${bundleName}/${fileName}.txt`, output, rowCount });
+      results.push({ name: `${bundleName}/${fileName}.txt`, output: layoutOutput, rowCount });
     }
     const zip = createZip(results);
     res.set({
@@ -360,19 +387,31 @@ app.post('/api/run/:id', async (req, res) => {
       return res.status(409).json({ error: `No existe el periodo ${qna} con las tablas cc_${qna} y ccd_${qna} en sirhdb.dbo.` });
     }
     const { output, rowCount, rows } = await executeLayout(section, qna);
+    let layoutOutput = output;
     if (section.id === 'SP5') {
-      const issues = findNullLiteralIssues(rows);
-      if (issues.length && req.body?.allowNulls !== true) {
-        return res.status(422).json({ warning: true, error: nullLiteralError(issues) });
+      if (typeof req.body?.sp5Override === 'string') {
+        if (hasUnresolvedSp5Fields(req.body.sp5Override)) {
+          return res.status(422).json({
+            needsCorrection: true,
+            error: 'Todavía hay campos NULL o vacíos en datos obligatorios de SP5. Corrígelos para continuar.',
+            sp5Text: req.body.sp5Override,
+          });
+        }
+        layoutOutput = req.body.sp5Override;
+      } else {
+        const issues = findSp5Issues(rows);
+        if (issues.length) {
+          return res.status(422).json({ needsCorrection: true, error: sp5IssueError(issues), sp5Text: output });
+        }
       }
     }
     if (format === 'zip') {
-      const zip = createZip([{ name: `${fileName}.txt`, output }]);
+      const zip = createZip([{ name: `${fileName}.txt`, output: layoutOutput }]);
       res.set({ 'Content-Type': 'application/zip', 'Content-Disposition': attachmentName(`${fileName}.zip`), 'X-Row-Count': String(rowCount) });
       return res.send(zip);
     }
     res.set({ 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': attachmentName(`${fileName}.txt`), 'X-Row-Count': String(rowCount) });
-    return res.send(output);
+    return res.send(layoutOutput);
   } catch (error) {
     console.error(`${section.id}:`, error);
     return res.status(500).json({ error: error.message || 'Error al ejecutar la consulta.' });
