@@ -349,4 +349,10 @@ if (process.env.NODE_ENV === 'production') {
   app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 
-app.listen(port, host, () => console.log(`Servidor SIGED disponible en http://${host}:${port}`));
+const server = app.listen(port, host, () => console.log(`Servidor SIGED disponible en http://${host}:${port}`));
+server.on('error', (error) => {
+  console.error(`No se pudo iniciar el servidor en ${host}:${port}: ${error.message}`);
+  // Código reservado para que el supervisor no reinicie en un ciclo infinito.
+  const exitCode = error.code === 'EADDRINUSE' ? 98 : 1;
+  server.close(() => process.exit(exitCode));
+});

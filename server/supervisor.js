@@ -28,6 +28,13 @@ function launch() {
       launch();
       return;
     }
+    if (code === 98) {
+      stopping = true;
+      for (const watcher of watchers) watcher.close();
+      console.error(`[supervisor] El puerto ${process.env.PORT || 3002} ya está ocupado. Se detuvo el reinicio automático; cierra el otro servidor SIGED o libera el puerto y vuelve a ejecutar npm run dev.`);
+      process.exitCode = 98;
+      return;
+    }
     console.error(`[supervisor] El servidor terminó (código ${code ?? '—'}, señal ${signal ?? '—'}). Se reiniciará en 2 segundos.`);
     scheduleRestart();
   });
