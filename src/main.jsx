@@ -109,7 +109,7 @@ function App() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('siged-theme') || 'light');
   const [fileNames, setFileNames] = useState({});
-  const [formats, setFormats] = useState({});
+  const [formats, setFormats] = useState(() => Object.fromEntries(layouts.map(({ id }) => [id, 'zip'])));
   const [bundleName, setBundleName] = useState('');
   const [busy, setBusy] = useState({});
   const [status, setStatus] = useState({});
@@ -374,7 +374,7 @@ function App() {
           </div>
           <div className="layout-tools">
             <input className="file-name-input" aria-label={`Nombre de archivo para ${layout.id}`} value={fileNames[layout.id] || ''} onChange={(event) => setFileNames((current) => ({ ...current, [layout.id]: event.target.value }))} placeholder={`${layout.id}_${qna}`} />
-            <select aria-label={`Formato de descarga para ${layout.id}`} value={formats[layout.id] || 'txt'} onChange={(event) => setFormats((current) => ({ ...current, [layout.id]: event.target.value }))}>
+            <select aria-label={`Formato de descarga para ${layout.id}`} value={formats[layout.id] || 'zip'} onChange={(event) => setFormats((current) => ({ ...current, [layout.id]: event.target.value }))}>
               <option value="txt">.TXT</option><option value="zip">.ZIP</option>
             </select>
             <button className="download-button" disabled={!valid || busy[layout.id]} onClick={() => run(layout)}>{busy[layout.id] ? 'Procesando…' : <>Generar <span>↗</span></>}</button>
