@@ -206,7 +206,9 @@ function App() {
       URL.revokeObjectURL(url);
       const counts = (response.headers.get('X-Layout-Counts') || '').split(',');
       setStatus(Object.fromEntries(layouts.map((layout, index) => [layout.id, {
-        type: 'success', message: `${counts[index] || '—'} registros · incluido en el ZIP`,
+        type: 'success', message: layout.id === 'SP4' && counts[index] === '0'
+          ? '0 registros · omitido del ZIP'
+          : `${counts[index] || '—'} registros · incluido en el ZIP`,
       }])));
     } catch (error) {
       setStatus(Object.fromEntries(layouts.map(({ id }) => [id, { type: 'error', message: error.message }])));
@@ -230,7 +232,7 @@ function App() {
     </header>
 
     <section className="intro" id="inicio">
-      <div className="eyebrow"><span>PROCESO DE NÓMINA</span><i /> CINCO ARCHIVOS DE SALIDA</div>
+      <div className="eyebrow"><span>PROCESO DE NÓMINA</span><i /> HASTA CINCO ARCHIVOS DE SALIDA</div>
       <h1>Creación de <em>layouts</em></h1>
       <p className="lead">Selecciona la quincena de proceso y genera los archivos de texto listos para integrar en SIGED.</p>
     </section>
@@ -261,7 +263,7 @@ function App() {
 
     <div className="section-heading">
       <div><h2>Layouts disponibles</h2><p>Archivos independientes, sin encabezados y separados por |</p></div>
-      <span className="count-pill">05 ARCHIVOS</span>
+      <span className="count-pill">HASTA 05 ARCHIVOS</span>
     </div>
 
     <section className="layout-list">

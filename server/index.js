@@ -298,8 +298,13 @@ app.post('/api/run-all', async (req, res) => {
       return res.status(409).json({ error: `No existe el periodo ${qna} con las tablas cc_${qna} y ccd_${qna} en sirhdb.dbo.` });
     }
     const results = [];
+    const layoutCounts = [];
     for (const section of sections) {
       const { output, rowCount } = await executeLayout(section, qna);
+      layoutCounts.push(rowCount);
+      if (section.id === 'SP4' && rowCount === 0) {
+        continue;
+      }
       const fileName = safeBaseName(req.body?.fileNames?.[section.id], `${section.id}_${qna}`);
       results.push({ name: `${bundleName}/${fileName}.txt`, output, rowCount });
     }
@@ -307,7 +312,7 @@ app.post('/api/run-all', async (req, res) => {
     res.set({
       'Content-Type': 'application/zip',
       'Content-Disposition': attachmentName(`${bundleName}.zip`),
-      'X-Layout-Counts': results.map(({ rowCount }) => rowCount).join(','),
+      'X-Layout-Counts': layoutCounts.join(','),
     });
     return res.send(zip);
   } catch (error) {
