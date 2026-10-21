@@ -141,7 +141,7 @@ function findNullLiteralIssues(rows) {
   const issues = [];
   rows.forEach((row, index) => {
     for (const [field, value] of Object.entries(row)) {
-      if (typeof value === 'string' && value.trim().toUpperCase() === 'NULL') {
+      if (value === null || value === undefined || (typeof value === 'string' && value.trim().toUpperCase() === 'NULL')) {
         issues.push({ row: index + 1, payroll: String(row.NUMERO_NOMINA ?? ''), field });
       }
     }
@@ -153,7 +153,7 @@ function nullLiteralError(issues) {
   const examples = issues.slice(0, 30).map(({ row, payroll, field }) =>
     `fila ${row}${payroll ? ` (nómina ${payroll})` : ''}: ${field}`);
   const remainder = issues.length > examples.length ? ` y ${issues.length - examples.length} más` : '';
-  return `SP5 contiene ${issues.length} campo(s) con el texto NULL. Corrige los datos en SQL antes de cargar el layout. ${examples.join('; ')}${remainder}.`;
+  return `SP5 contiene ${issues.length} campo(s) con valor NULL o faltante. Corrige los datos en SQL antes de cargar el layout. ${examples.join('; ')}${remainder}.`;
 }
 
 function safeBaseName(value, fallback) {
@@ -175,7 +175,7 @@ async function executeLayout(section, qna) {
   const result = await pool.request().query(prepareSql(section, qna));
   const rows = result.recordsets?.[0] ?? result.recordset ?? [];
   const output = rows.map((row) => Object.values(row).map((value) => {
-    if (value === null || value === undefined) return '';
+    if (value === null || value === undefined) return section.id === 'SP5' ? 'NULL' : '';
     return String(value).replace(/[|\r\n]/g, ' ');
   }).join('|')).join('\r\n');
   return { output, rowCount: rows.length, rows };
