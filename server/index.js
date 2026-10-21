@@ -137,6 +137,25 @@ function prepareSql(section, qna) {
   return text;
 }
 
+function findNullLiteralIssues(rows) {
+  const issues = [];
+  rows.forEach((row, index) => {
+    for (const [field, value] of Object.entries(row)) {
+      if (typeof value === 'string' && value.trim().toUpperCase() === 'NULL') {
+        issues.push({ row: index + 1, payroll: String(row.NUMERO_NOMINA ?? ''), field });
+      }
+    }
+  });
+  return issues;
+}
+
+function nullLiteralError(issues) {
+  const examples = issues.slice(0, 30).map(({ row, payroll, field }) =>
+    `fila ${row}${payroll ? ` (nómina ${payroll})` : ''}: ${field}`);
+  const remainder = issues.length > examples.length ? ` y ${issues.length - examples.length} más` : '';
+  return `SP5 no se generó: hay ${issues.length} campo(s) con el texto NULL. Corrige los datos de origen en SQL y vuelve a intentar. ${examples.join('; ')}${remainder}.`;
+}
+
 function safeBaseName(value, fallback) {
   const cleaned = String(value ?? '').trim()
     .replace(/\.(txt|zip)$/i, '')
@@ -159,7 +178,7 @@ async function executeLayout(section, qna) {
     if (value === null || value === undefined) return '';
     return String(value).replace(/[|\r\n]/g, ' ');
   }).join('|')).join('\r\n');
-  return { output, rowCount: rows.length };
+  return { output, rowCount: rows.length, rows };
 }
 
 function createZip(files) {
@@ -300,8 +319,12 @@ app.post('/api/run-all', async (req, res) => {
     const results = [];
     const layoutCounts = [];
     for (const section of sections) {
-      const { output, rowCount } = await executeLayout(section, qna);
+      const { output, rowCount, rows } = await executeLayout(section, qna);
       layoutCounts.push(rowCount);
+      if (section.id === 'SP5') {
+        const issues = findNullLiteralIssues(rows);
+        if (issues.length) return res.status(422).json({ error: nullLiteralError(issues) });
+      }
       if (section.id === 'SP4' && rowCount === 0) {
         continue;
       }
@@ -334,7 +357,11 @@ app.post('/api/run/:id', async (req, res) => {
     if (!(await availableQnas()).includes(qna)) {
       return res.status(409).json({ error: `No existe el periodo ${qna} con las tablas cc_${qna} y ccd_${qna} en sirhdb.dbo.` });
     }
-    const { output, rowCount } = await executeLayout(section, qna);
+    const { output, rowCount, rows } = await executeLayout(section, qna);
+    if (section.id === 'SP5') {
+      const issues = findNullLiteralIssues(rows);
+      if (issues.length) return res.status(422).json({ error: nullLiteralError(issues) });
+    }
     if (format === 'zip') {
       const zip = createZip([{ name: `${fileName}.txt`, output }]);
       res.set({ 'Content-Type': 'application/zip', 'Content-Disposition': attachmentName(`${fileName}.zip`), 'X-Row-Count': String(rowCount) });
