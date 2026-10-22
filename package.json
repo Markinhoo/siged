@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
+    "dev": "node server/dev.js",
     "dev:server": "node server/supervisor.js",
     "dev:client": "vite",
     "build": "vite build",
