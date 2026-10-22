@@ -8,6 +8,19 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..');
 const preferredPort = Number(process.env.PORT || 3003);
 
+function cleanupStaleWindowsProcesses() {
+  if (process.platform !== 'win32') return Promise.resolve();
+  return new Promise((resolve) => {
+    const cleanup = spawn('powershell.exe', [
+      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(here, 'cleanup-windows.ps1'),
+      '-ProjectRoot', root, '-KeepProcessId', String(process.pid),
+    ], { cwd: root, env: process.env, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+    cleanup.stdout.on('data', (chunk) => process.stdout.write(`[dev] ${chunk}`));
+    cleanup.once('error', () => resolve());
+    cleanup.once('exit', () => resolve());
+  });
+}
+
 function isPortAvailable(port) {
   return new Promise((resolve) => {
     const probe = createServer();
@@ -25,6 +38,7 @@ async function findApiPort() {
   throw new Error(`No hay puertos libres entre ${preferredPort} y ${preferredPort + 99}.`);
 }
 
+await cleanupStaleWindowsProcesses();
 const apiPort = await findApiPort();
 if (apiPort !== preferredPort) {
   console.log(`[dev] El puerto ${preferredPort} está ocupado; la API usará ${apiPort}.`);
@@ -37,13 +51,26 @@ const children = [
 ];
 let stopping = false;
 
+function killProcessTree(child) {
+  if (!child.pid || child.exitCode !== null) return Promise.resolve();
+  if (process.platform !== 'win32') {
+    child.kill('SIGTERM');
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    const killer = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+      windowsHide: true, stdio: 'ignore',
+    });
+    killer.once('error', () => { child.kill(); resolve(); });
+    killer.once('exit', () => resolve());
+  });
+}
+
 function stop(code = 0) {
   if (stopping) return;
   stopping = true;
   process.exitCode = code;
-  for (const child of children) {
-    if (child.exitCode === null && !child.killed) child.kill();
-  }
+  for (const child of children) void killProcessTree(child);
 }
 
 for (const child of children) {
