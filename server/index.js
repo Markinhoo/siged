@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const app = express();
-const port = Number(process.env.PORT || 3002);
+const port = Number(process.env.PORT || 3003);
 const host = process.env.HOST || '127.0.0.1';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const queryText = await readFile(path.join(here, '..', 'queries.txt'), 'utf8');

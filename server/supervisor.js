@@ -31,7 +31,7 @@ function launch() {
     if (code === 98) {
       stopping = true;
       for (const watcher of watchers) watcher.close();
-      console.error(`[supervisor] El puerto ${process.env.PORT || 3002} ya está ocupado. Se detuvo el reinicio automático; cierra el otro servidor SIGED o libera el puerto y vuelve a ejecutar npm run dev.`);
+      console.error(`[supervisor] El puerto ${process.env.PORT || 3003} ya está ocupado. Se detuvo el reinicio automático; cierra el otro servidor SIGED o libera el puerto y vuelve a ejecutar npm run dev.`);
       process.exitCode = 98;
       return;
     }
