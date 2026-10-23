@@ -24,7 +24,6 @@ async function requestExport(url, payload) {
 }
 
 function unresolvedSp5Fields(text) {
-  const requiredIndexes = new Set([5, 9, 10, 11]);
   const unresolved = [];
   const separators = text.match(/\r\n|\n|\r/g) || [];
   let offset = 0;
@@ -33,12 +32,10 @@ function unresolvedSp5Fields(text) {
     if (line) {
       const fields = line.split('|');
       let fieldOffset = 0;
-      fields.forEach((field, index) => {
+      fields.forEach((field) => {
         const trimmed = field.trim();
         if (trimmed.toUpperCase() === 'NULL') {
           unresolved.push({ start: offset + fieldOffset + field.indexOf(trimmed), end: offset + fieldOffset + field.indexOf(trimmed) + trimmed.length });
-        } else if (requiredIndexes.has(index) && !trimmed) {
-          unresolved.push({ start: offset + fieldOffset, end: offset + fieldOffset });
         }
         fieldOffset += field.length + 1;
       });
@@ -68,6 +65,7 @@ function ThemeButton({ theme, onToggle }) {
 }
 
 function AuthScreen({ theme, onToggleTheme, configured, error, username, setUsername, password, setPassword, busy, onSubmit }) {
+  const [showPassword, setShowPassword] = useState(false);
   return <main className="shell auth-page">
     <header className="topbar">
       <a className="brand" href="#inicio" aria-label="SIGED">
@@ -83,7 +81,12 @@ function AuthScreen({ theme, onToggleTheme, configured, error, username, setUser
       <label htmlFor="login-user">USUARIO</label>
       <input id="login-user" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required />
       <label htmlFor="login-password">CONTRASEÑA</label>
-      <input id="login-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+      <div className="password-field">
+        <input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+        <button className="password-visibility" type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+          {showPassword ? <svg key="open" viewBox="0 0 24 24" aria-hidden="true"><path className="eye-outline" d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z"/><circle cx="12" cy="12" r="2.5"/><path d="M5 6 3.8 4.8M9 4.4 8.6 2.8M15 4.4l.4-1.6M19 6l1.2-1.2"/></svg> : <svg key="closed" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13.5Q12 20.5 21 13.5M5.5 14.7l-1 2M9 16.2l-.3 2M15 16.2l.3 2M18.5 14.7l1 2"/></svg>}
+        </button>
+      </div>
       {error && <p className="login-error" role="alert">{error}</p>}
       <button className="primary-button login-submit" disabled={busy || !username || !password}>{busy ? <><span className="spinner" /> Verificando…</> : 'Entrar'}</button>
     </form> : <section className="login-card setup-card">
@@ -270,7 +273,7 @@ function App() {
     }
     const unresolved = unresolvedSp5Fields(sp5Editor.text);
     if (unresolved.length) {
-      setSp5EditorError(`Quedan ${unresolved.length} campos NULL o vacíos. Corrige el siguiente seleccionado para continuar.`);
+      setSp5EditorError(`Quedan ${unresolved.length} valores NULL. Corrige el siguiente seleccionado para continuar.`);
       const position = unresolved[0];
       if (position && sp5EditorRef.current) {
         sp5EditorRef.current.focus();
@@ -353,7 +356,7 @@ function App() {
           <input id="bundle-name" value={bundleName} onChange={(event) => setBundleName(event.target.value)} placeholder={`SIGED_QNA_${qna}`} />
         </div>
         <button className="primary-button" onClick={runAll} disabled={!valid || allBusy}>
-          {allBusy ? <><span className="spinner" /> Generando…</> : <><span>↓</span> Generar los 5 TXT</>}
+          {allBusy ? <><span className="spinner" /> Generando…</> : <><span>↓</span> Generar ZIP con 5 layouts</>}
         </button>
       </div>
     </section>
@@ -382,7 +385,7 @@ function App() {
         </article>;
       })}
     </section>
-    <footer><span>Sin encabezados y separado por |. El ZIP contiene los TXT con los nombres indicados.</span><span className="footer-code">SIGED <i>/</i> LAYOUTS</span></footer>
+    <footer><span>Sin encabezados y separado por |. El ZIP contiene una carpeta con un ZIP por layout; cada uno incluye su TXT.</span><span className="footer-code">SIGED <i>/</i> LAYOUTS</span></footer>
 
     {sp5Editor && <div className="sp5-editor-backdrop">
       <section className="sp5-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="sp5-editor-title">
@@ -411,7 +414,7 @@ function App() {
         />
         {sp5EditorError && <p className="login-error sp5-editor-error" role="alert">{sp5EditorError}</p>}
         <div className="sp5-editor-actions">
-          <span>{unresolvedSp5Fields(sp5Editor.text).length} campos NULL o vacíos pendientes</span>
+          <span>{unresolvedSp5Fields(sp5Editor.text).length} valores NULL pendientes</span>
           <button className="primary-button" type="button" onClick={saveSp5Corrections} disabled={sp5EditorBusy}>
             {sp5EditorBusy ? <><span className="spinner" /> Guardando…</> : sp5Editor.origin === 'all' ? 'Guardar cambios y generar ZIP' : 'Guardar cambios y descargar SP5'}
           </button>

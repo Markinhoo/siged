@@ -25,8 +25,6 @@ const sessionTtlMs = 8 * 60 * 60 * 1000;
 const loginWindowMs = 15 * 60 * 1000;
 const maxLoginAttempts = 5;
 const cookieName = 'siged_session';
-const requiredSp5Fields = new Set(['CURP', 'PRIMER_APELLIDO', 'SEGUNDO_APELLIDO', 'NOMBRE']);
-const requiredSp5ColumnIndexes = [5, 9, 10, 11];
 
 function sectionSql(section) {
   const start = queryText.indexOf(section.start);
@@ -143,8 +141,7 @@ function findSp5Issues(rows) {
   const issues = [];
   rows.forEach((row, index) => {
     for (const [field, value] of Object.entries(row)) {
-      const missingRequired = requiredSp5Fields.has(field) && typeof value === 'string' && !value.trim();
-      if (value === null || value === undefined || missingRequired || (typeof value === 'string' && value.trim().toUpperCase() === 'NULL')) {
+      if (value === null || value === undefined || (typeof value === 'string' && value.trim().toUpperCase() === 'NULL')) {
         issues.push({ row: index + 1, payroll: String(row.NUMERO_NOMINA ?? ''), field });
       }
     }
@@ -156,7 +153,7 @@ function sp5IssueError(issues) {
   const examples = issues.slice(0, 30).map(({ row, payroll, field }) =>
     `fila ${row}${payroll ? ` (nómina ${payroll})` : ''}: ${field}`);
   const remainder = issues.length > examples.length ? ` y ${issues.length - examples.length} más` : '';
-  return `SP5 contiene ${issues.length} campo(s) con valor NULL o faltante. Corrige los datos antes de cargar el layout. ${examples.join('; ')}${remainder}.`;
+  return `SP5 contiene ${issues.length} valor(es) NULL. Corrige los datos antes de cargar el layout. ${examples.join('; ')}${remainder}.`;
 }
 
 function hasUnresolvedSp5Fields(text) {
@@ -164,8 +161,7 @@ function hasUnresolvedSp5Fields(text) {
   return String(text).split(/\r?\n/).some((line) => {
     if (!line) return false;
     const fields = line.split('|');
-    return fields.some((field) => field.trim().toUpperCase() === 'NULL') ||
-      requiredSp5ColumnIndexes.some((index) => !fields[index]?.trim());
+    return fields.some((field) => field.trim().toUpperCase() === 'NULL');
   });
 }
 
@@ -188,7 +184,7 @@ async function executeLayout(section, qna) {
   const result = await pool.request().query(prepareSql(section, qna));
   const rows = result.recordsets?.[0] ?? result.recordset ?? [];
   const output = rows.map((row) => Object.entries(row).map(([field, value]) => {
-    if (value === null || value === undefined || (section.id === 'SP5' && requiredSp5Fields.has(field) && typeof value === 'string' && !value.trim())) {
+    if (value === null || value === undefined) {
       return section.id === 'SP5' ? 'NULL' : '';
     }
     return String(value).replace(/[|\r\n]/g, ' ');
@@ -342,7 +338,7 @@ app.post('/api/run-all', async (req, res) => {
           if (hasUnresolvedSp5Fields(req.body.sp5Override)) {
             return res.status(422).json({
               needsCorrection: true,
-              error: 'Todavía hay campos NULL o vacíos en datos obligatorios de SP5. Corrígelos para continuar.',
+              error: 'Todavía hay valores NULL en SP5. Corrígelos para continuar.',
               sp5Text: req.body.sp5Override,
             });
           }
@@ -358,7 +354,8 @@ app.post('/api/run-all', async (req, res) => {
         continue;
       }
       const fileName = safeBaseName(req.body?.fileNames?.[section.id], `${section.id}_${qna}`);
-      results.push({ name: `${bundleName}/${fileName}.txt`, output: layoutOutput, rowCount });
+      const layoutZip = createZip([{ name: `${fileName}.txt`, output: layoutOutput }]);
+      results.push({ name: `${bundleName}/${fileName}.zip`, output: layoutZip, rowCount });
     }
     const zip = createZip(results);
     res.set({
@@ -393,7 +390,7 @@ app.post('/api/run/:id', async (req, res) => {
         if (hasUnresolvedSp5Fields(req.body.sp5Override)) {
           return res.status(422).json({
             needsCorrection: true,
-            error: 'Todavía hay campos NULL o vacíos en datos obligatorios de SP5. Corrígelos para continuar.',
+            error: 'Todavía hay valores NULL en SP5. Corrígelos para continuar.',
             sp5Text: req.body.sp5Override,
           });
         }
